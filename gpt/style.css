@@ -1,0 +1,145 @@
+body{
+font-family:Arial;
+margin:0;
+background:#f6f6f6;
+}
+
+.navbar{
+display:flex;
+justify-content:space-between;
+padding:15px 40px;
+background:linear-gradient(90deg,#ff8a00,#ffb347);
+color:white;
+}
+
+.logo{
+font-weight:bold;
+font-size:20px;
+}
+
+.navbar a{
+color:white;
+margin-left:15px;
+text-decoration:none;
+}
+
+.hero{
+text-align:center;
+padding:80px 20px;
+}
+
+.hero h1{
+font-size:40px;
+}
+
+.hero input{
+width:400px;
+padding:12px;
+margin-top:20px;
+border-radius:25px;
+border:1px solid #ddd;
+}
+
+.hero button{
+padding:12px 25px;
+background:#ff8a00;
+border:none;
+color:white;
+border-radius:25px;
+cursor:pointer;
+}
+
+.cards{
+display:flex;
+gap:20px;
+justify-content:center;
+margin-top:40px;
+}
+
+.card{
+background:white;
+padding:20px;
+border-radius:12px;
+width:260px;
+box-shadow:0 5px 15px rgba(0,0,0,0.1);
+}
+
+.score{
+background:#2ecc71;
+padding:5px 10px;
+border-radius:10px;
+color:white;
+}
+
+.card ul{
+padding-left:20px;
+}
+
+.card button{
+background:#ff8a00;
+border:none;
+color:white;
+padding:10px 15px;
+border-radius:20px;
+}
+
+.resume-box{
+margin-top:50px;
+text-align:center;
+background:white;
+padding:30px;
+width:600px;
+margin-left:auto;
+margin-right:auto;
+border-radius:12px;
+}
+
+.hidden{
+display:none;
+}
+
+.form-container{
+width:350px;
+margin:100px auto;
+background:white;
+padding:30px;
+border-radius:10px;
+box-shadow:0 5px 15px rgba(0,0,0,0.1);
+}
+
+.form-container input{
+width:100%;
+padding:10px;
+margin:10px 0;
+}
+
+.form-container button{
+width:100%;
+padding:12px;
+background:#ff8a00;
+border:none;
+color:white;
+border-radius:5px;
+}
+
+.cta{
+display:inline-block;
+margin-top:20px;
+background:#ff8a00;
+color:white;
+padding:12px 20px;
+border-radius:25px;
+text-decoration:none;
+}
+
+.features{
+display:flex;
+justify-content:center;
+gap:40px;
+padding:60px;
+}
+
+.feature{
+width:200px;
+text-align:center;
+}
