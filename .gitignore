@@ -1,0 +1,15 @@
+# secrets / env
+.env
+
+# dependencies
+node_modules/
+
+# logs
+*.log
+
+# internal docs (spec & guide) — keep out of the public repo
+*.pdf
+
+# OS files
+.DS_Store
+Thumbs.db

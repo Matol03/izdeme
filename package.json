@@ -1,0 +1,14 @@
+{
+  "name": "izdeme",
+  "version": "1.0.0",
+  "private": true,
+  "description": "IzdeMe — AI career agent: semantic hh.kz vacancy search + resume parsing + weighted Fit Score",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

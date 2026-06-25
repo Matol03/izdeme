@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>IzdeMe — AI Career Agent · Semantic hh.kz Matching</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#06060c; --panel:rgba(20,20,34,.66); --panel-solid:#12121f;
+    --stroke:rgba(255,255,255,.08); --stroke-strong:rgba(255,255,255,.16);
+    --txt:#f3f4fb; --muted:#8a8ca3; --muted-2:#6a6c82;
+    --brand:#7c5cff; --brand-2:#4d8dff; --accent:#a78bfa;
+    --green:#27d39a; --green-bg:rgba(39,211,154,.14);
+    --amber:#ffb44d; --amber-bg:rgba(255,180,77,.14);
+    --red:#ff6b6b; --red-bg:rgba(255,107,107,.13);
+    --hard:#7c5cff; --exp:#4d8dff; --soft:#27d39a;
+    --radius:18px; --shadow:0 24px 60px -28px rgba(0,0,0,.85);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--txt);min-height:100vh;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+  .bg-grid{position:fixed;inset:0;z-index:0;pointer-events:none;background-image:linear-gradient(rgba(255,255,255,.022) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.022) 1px,transparent 1px);background-size:46px 46px;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,#000 40%,transparent 100%)}
+  .bg-glow{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+  .bg-glow::before,.bg-glow::after{content:"";position:absolute;border-radius:50%;filter:blur(80px);opacity:.45}
+  .bg-glow::before{width:520px;height:520px;background:radial-gradient(circle,#5b3df0,transparent 70%);top:-200px;left:50%;transform:translateX(-50%)}
+  .bg-glow::after{width:440px;height:440px;background:radial-gradient(circle,#2d6bff,transparent 70%);top:120px;right:-160px;opacity:.3}
+  h1,h2,h3,.brand-name{font-family:'Sora',sans-serif}
+  .wrap{position:relative;z-index:2;max-width:1180px;margin:0 auto;padding:0 24px}
+
+  header{position:sticky;top:0;z-index:20;backdrop-filter:blur(14px);background:linear-gradient(180deg,rgba(6,6,12,.85),rgba(6,6,12,.35))}
+  .nav{display:flex;align-items:center;justify-content:space-between;height:74px}
+  .brand{display:flex;align-items:center;gap:11px;cursor:pointer}
+  .brand-name{font-size:21px;font-weight:700;letter-spacing:-.02em}
+  .brand-name b{background:linear-gradient(90deg,var(--brand),var(--brand-2));-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:800}
+  .pill-user{display:flex;align-items:center;gap:10px;padding:7px 14px 7px 7px;border:1px solid var(--stroke);border-radius:999px;background:var(--panel);font-size:14px;font-weight:500}
+  .avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--brand),var(--brand-2));display:grid;place-items:center;font-size:13px;font-weight:700;color:#fff}
+
+  .hero{text-align:center;padding:70px 0 18px;position:relative;z-index:2}
+  .badge{display:inline-flex;align-items:center;gap:8px;padding:7px 15px;border:1px solid var(--stroke-strong);border-radius:999px;background:var(--panel);font-size:12.5px;color:var(--muted);margin-bottom:26px}
+  .badge .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 12px var(--green)}
+  .hero h1{font-size:clamp(32px,5vw,58px);line-height:1.05;font-weight:800;letter-spacing:-.03em;max-width:880px;margin:0 auto}
+  .hero h1 .grad{background:linear-gradient(100deg,var(--brand) 10%,var(--brand-2) 90%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero p.sub{color:var(--muted);font-size:clamp(15px,1.6vw,17px);max-width:560px;margin:20px auto 0;line-height:1.6}
+
+  /* steps */
+  .steps{display:flex;gap:10px;justify-content:center;margin:26px auto 0;flex-wrap:wrap}
+  .step{display:flex;align-items:center;gap:9px;padding:8px 15px;border:1px solid var(--stroke);border-radius:999px;background:var(--panel);font-size:12.5px;color:var(--muted)}
+  .step b{color:var(--txt);font-weight:600}
+  .step .n{width:19px;height:19px;border-radius:50%;background:rgba(124,92,255,.2);color:var(--accent);display:grid;place-items:center;font-size:11px;font-weight:700}
+  .step.done .n{background:var(--green-bg);color:var(--green)}
+
+  .search-shell{max-width:760px;margin:30px auto 0}
+  .search-box{display:flex;align-items:center;gap:10px;padding:9px 9px 9px 22px;border:1px solid var(--stroke-strong);border-radius:999px;background:rgba(14,14,24,.85);box-shadow:var(--shadow);transition:.2s}
+  .search-box:focus-within{border-color:rgba(124,92,255,.6);box-shadow:0 0 0 4px rgba(124,92,255,.12),var(--shadow)}
+  .search-box svg.lead{color:var(--muted);flex-shrink:0}
+  #prompt{flex:1;background:transparent;border:none;outline:none;color:var(--txt);font-size:16px;font-family:inherit;padding:14px 0}
+  #prompt::placeholder{color:var(--muted-2)}
+  .btn-run{display:flex;align-items:center;gap:9px;padding:14px 24px;border:none;border-radius:999px;background:linear-gradient(100deg,var(--brand),var(--brand-2));color:#fff;font-family:'Sora';font-weight:600;font-size:15px;cursor:pointer;white-space:nowrap;transition:.15s}
+  .btn-run:hover{transform:translateY(-1px);filter:brightness(1.08)}
+  .btn-run:disabled{opacity:.7;cursor:wait}
+  .chips{display:flex;flex-wrap:wrap;gap:9px;justify-content:center;margin-top:16px}
+  .chip{padding:8px 14px;border:1px solid var(--stroke);border-radius:999px;background:var(--panel);color:var(--muted);font-size:13px;cursor:pointer;transition:.18s}
+  .chip:hover{color:var(--txt);border-color:var(--stroke-strong);background:rgba(124,92,255,.1)}
+
+  /* resume panel */
+  .resume-shell{max-width:760px;margin:18px auto 0}
+  .dropzone{display:flex;align-items:center;gap:16px;padding:18px 20px;border:1.5px dashed var(--stroke-strong);border-radius:16px;background:var(--panel);transition:.2s;cursor:pointer}
+  .dropzone:hover,.dropzone.drag{border-color:rgba(124,92,255,.6);background:rgba(124,92,255,.07)}
+  .dz-ico{width:44px;height:44px;border-radius:12px;background:rgba(124,92,255,.16);display:grid;place-items:center;flex-shrink:0;color:var(--accent)}
+  .dz-txt{flex:1;text-align:left}
+  .dz-txt b{font-size:14.5px;font-weight:600}
+  .dz-txt span{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
+  .dz-actions{display:flex;gap:9px;flex-shrink:0}
+  .mini-btn{padding:9px 14px;border:1px solid var(--stroke-strong);border-radius:10px;background:rgba(255,255,255,.04);color:var(--txt);font-family:'Sora';font-weight:600;font-size:12.5px;cursor:pointer;transition:.18s;white-space:nowrap}
+  .mini-btn:hover{background:rgba(124,92,255,.14);border-color:rgba(124,92,255,.45)}
+
+  /* parsed profile */
+  .profile{display:none;border:1px solid var(--stroke);border-radius:16px;background:linear-gradient(180deg,rgba(39,211,154,.05),var(--panel));padding:18px 20px}
+  .profile.show{display:block;animation:fade .4s}
+  .profile-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+  .profile-head .l{display:flex;align-items:center;gap:11px}
+  .profile-head .ok-ico{width:32px;height:32px;border-radius:9px;background:var(--green-bg);color:var(--green);display:grid;place-items:center;flex-shrink:0}
+  .profile-head h4{font-size:14.5px;font-weight:700}
+  .profile-head p{font-size:12px;color:var(--muted);margin-top:1px}
+  .profile-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;text-align:left}
+  .pg-block .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted-2);margin-bottom:7px;font-weight:600}
+  .pg-block .vals{display:flex;flex-wrap:wrap;gap:6px}
+  .pg-block .v{font-size:13px;color:var(--muted)}
+  .pchip{padding:4px 9px;border-radius:7px;font-size:11.5px;border:1px solid var(--stroke);background:rgba(255,255,255,.03);color:#c9cbe0}
+  .pchip.hard{border-color:rgba(124,92,255,.35);color:#cbb6ff;background:rgba(124,92,255,.1)}
+  .pchip.soft{border-color:rgba(39,211,154,.3);color:#9af0cf;background:var(--green-bg)}
+  .json-toggle{font-size:12px;color:var(--accent);cursor:pointer;background:none;border:none;font-family:inherit;text-decoration:underline;padding:0}
+  pre.json{display:none;margin-top:14px;padding:14px;border:1px solid var(--stroke);border-radius:10px;background:rgba(0,0,0,.35);font-size:12px;line-height:1.55;color:#b9d0ff;overflow:auto;font-family:ui-monospace,monospace}
+  pre.json.show{display:block}
+
+  .source-note{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:22px;font-size:12.5px;color:var(--muted-2)}
+  .source-note b{color:var(--muted)}
+
+  /* results */
+  #results{display:none;padding:18px 0 90px;position:relative;z-index:2}
+  #results.show{display:block;animation:fade .5s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+  .res-head{display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:16px;margin:30px 0 22px}
+  .res-head h2{font-size:23px;font-weight:700;letter-spacing:-.02em}
+  .res-head h2 b{color:var(--accent)}
+  .res-head p{color:var(--muted);font-size:13.5px;margin-top:6px}
+  .res-meta{display:flex;gap:10px;flex-wrap:wrap}
+  .meta-pill{padding:8px 14px;border:1px solid var(--stroke);border-radius:12px;background:var(--panel);font-size:12.5px;color:var(--muted)}
+  .meta-pill b{color:var(--txt)}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(355px,1fr));gap:18px}
+  .card{border:1px solid var(--stroke);border-radius:var(--radius);background:var(--panel);backdrop-filter:blur(8px);padding:22px;display:flex;flex-direction:column;gap:14px;transition:.18s;position:relative;overflow:hidden;animation:fade .5s ease backwards}
+  .card::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--brand),var(--brand-2));opacity:0;transition:.2s}
+  .card:hover{transform:translateY(-4px);border-color:var(--stroke-strong);box-shadow:var(--shadow)}
+  .card:hover::before,.card.top::before{opacity:1}
+  .card.top{border-color:rgba(124,92,255,.4)}
+  .rank{position:absolute;top:14px;right:14px;font-size:11px;color:var(--muted-2);font-weight:600}
+  .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+  .card h3{font-size:16.5px;font-weight:700;line-height:1.3;padding-right:30px}
+  .company{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12.5px;margin-top:7px}
+  .company .logo{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,#2a2a44,#1a1a2e);display:grid;place-items:center;font-size:11px;font-weight:700;color:var(--accent);flex-shrink:0}
+  .fit-ring{--p:0;width:60px;height:60px;border-radius:50%;flex-shrink:0;display:grid;place-items:center;background:conic-gradient(var(--ring-col) calc(var(--p)*1%),rgba(255,255,255,.07) 0);position:relative}
+  .fit-ring::before{content:"";position:absolute;inset:5px;border-radius:50%;background:var(--panel-solid)}
+  .fit-ring .num{position:relative;font-family:'Sora';font-weight:700;font-size:16px;line-height:1}
+  .fit-ring .lbl{position:relative;font-size:8px;color:var(--muted);letter-spacing:.08em;margin-top:1px}
+
+  /* 40/30/30 breakdown */
+  .breakdown{display:flex;flex-direction:column;gap:8px;padding:12px 0;border-top:1px solid var(--stroke);border-bottom:1px solid var(--stroke)}
+  .bd-row{display:grid;grid-template-columns:74px 1fr 34px;align-items:center;gap:10px;font-size:11.5px}
+  .bd-row .bk{color:var(--muted);font-weight:500}
+  .bd-row .bk small{color:var(--muted-2)}
+  .bar{height:6px;border-radius:4px;background:rgba(255,255,255,.07);overflow:hidden}
+  .bar i{display:block;height:100%;border-radius:4px;transition:width .6s ease}
+  .bd-row .pc{text-align:right;color:var(--txt);font-weight:600;font-variant-numeric:tabular-nums}
+
+  .salary{font-family:'Sora';font-size:13.5px;font-weight:600;color:var(--txt)}
+  .salary span{color:var(--muted);font-weight:400;font-size:12px}
+  .vac-meta{display:flex;gap:8px;flex-wrap:wrap}
+  .vmeta{font-size:11px;color:var(--muted-2);border:1px solid var(--stroke);border-radius:6px;padding:3px 8px}
+
+  /* explainability */
+  .explain{display:flex;flex-direction:column;gap:11px}
+  .ex-block .ex-h{display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;margin-bottom:6px}
+  .ex-block.match .ex-h{color:var(--green)}
+  .ex-block.gap .ex-h{color:var(--amber)}
+  .ex-block.sug .ex-h{color:var(--accent)}
+  .ex-tags{display:flex;flex-wrap:wrap;gap:6px}
+  .ex-tag{padding:4px 9px;border-radius:7px;font-size:11.5px;border:1px solid var(--stroke);background:rgba(255,255,255,.02);color:var(--muted)}
+  .ex-tag.m{color:var(--green);border-color:rgba(39,211,154,.3);background:var(--green-bg)}
+  .ex-tag.g{color:var(--amber);border-color:rgba(255,180,77,.3);background:var(--amber-bg)}
+  .sug-list{margin:0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:5px}
+  .sug-list li{font-size:12px;color:var(--muted);line-height:1.45;display:flex;gap:7px}
+  .sug-list li::before{content:"→";color:var(--accent);flex-shrink:0}
+
+  .card-actions{display:flex;gap:10px;margin-top:2px}
+  .btn-ghost{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:11px;border:1px solid var(--stroke-strong);border-radius:11px;background:rgba(255,255,255,.03);color:var(--txt);font-family:'Sora';font-weight:600;font-size:13px;cursor:pointer;transition:.18s;text-decoration:none}
+  .btn-ghost:hover{background:rgba(124,92,255,.14);border-color:rgba(124,92,255,.45)}
+  .btn-ghost.primary{background:linear-gradient(100deg,rgba(124,92,255,.22),rgba(77,141,255,.22));border-color:rgba(124,92,255,.45)}
+
+  /* resume patch */
+  .patch{margin-top:26px;border:1px solid var(--stroke);border-radius:var(--radius);background:linear-gradient(180deg,rgba(124,92,255,.06),var(--panel));backdrop-filter:blur(8px);overflow:hidden;animation:fade .5s ease}
+  .patch-head{display:flex;align-items:center;gap:15px;padding:22px 24px;border-bottom:1px solid var(--stroke)}
+  .patch-icon{width:46px;height:46px;border-radius:13px;background:linear-gradient(135deg,var(--brand),var(--brand-2));display:grid;place-items:center;flex-shrink:0;box-shadow:0 8px 22px -8px var(--brand)}
+  .patch-head h3{font-size:18px;font-weight:700}
+  .patch-head p{color:var(--muted);font-size:13.5px;margin-top:3px}
+  .patch-head p b{color:var(--accent)}
+  .patch-body{padding:22px 24px}
+  .resume-text{font-size:15px;line-height:1.85;color:#d7d8e6;border:1px solid var(--stroke);border-radius:12px;background:rgba(0,0,0,.25);padding:20px 22px}
+  .resume-text mark{background:rgba(124,92,255,.16);color:#cbb6ff;border-bottom:1.5px solid rgba(124,92,255,.6);border-radius:3px;padding:0 3px;font-weight:600;text-decoration:none}
+  .patch-foot{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-top:18px}
+  .patch-foot .hint{font-size:12.5px;color:var(--muted-2);max-width:58%}
+  .btn-copy{display:flex;align-items:center;gap:9px;padding:11px 18px;border:1px solid var(--stroke-strong);border-radius:11px;background:rgba(255,255,255,.04);color:var(--txt);font-family:'Sora';font-weight:600;font-size:13.5px;cursor:pointer;transition:.18s}
+  .btn-copy:hover{background:rgba(124,92,255,.14);border-color:rgba(124,92,255,.45)}
+  .btn-copy.done{color:var(--green);border-color:rgba(39,211,154,.4);background:var(--green-bg)}
+
+  .skel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(355px,1fr));gap:18px}
+  .skel{height:340px;border:1px solid var(--stroke);border-radius:var(--radius);background:var(--panel);position:relative;overflow:hidden}
+  .skel::after{content:"";position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,transparent,rgba(255,255,255,.05),transparent);animation:shimmer 1.3s infinite}
+  @keyframes shimmer{to{transform:translateX(100%)}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  footer{text-align:center;padding:34px 0;color:var(--muted-2);font-size:12.5px;position:relative;z-index:2;border-top:1px solid var(--stroke)}
+  footer b{color:var(--muted)}
+
+  @media(max-width:560px){
+    .search-box{flex-direction:column;border-radius:20px;padding:14px}
+    #prompt{width:100%;text-align:center}
+    .btn-run{width:100%;justify-content:center}
+    .grid,.skel-grid{grid-template-columns:1fr}
+    .dropzone{flex-direction:column;text-align:center}
+    .dz-txt{text-align:center}
+    .patch-foot .hint{max-width:100%}
+  }
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="bg-glow"></div>
+
+<header>
+  <div class="wrap nav">
+    <div class="brand" onclick="resetApp()">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2L2 7l10 5 10-5-10-5Z" fill="url(#g1)"/>
+        <path d="M2 12l10 5 10-5" stroke="url(#g1)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".7"/>
+        <path d="M2 17l10 5 10-5" stroke="url(#g1)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".4"/>
+        <defs><linearGradient id="g1" x1="2" y1="2" x2="22" y2="22"><stop stop-color="#7c5cff"/><stop offset="1" stop-color="#4d8dff"/></linearGradient></defs>
+      </svg>
+      <div class="brand-name">Izde<b>Me</b></div>
+    </div>
+    <div class="pill-user"><div class="avatar">MA</div><span>Murat Askarov</span></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero" id="hero">
+    <div class="badge"><span class="dot"></span> Semantic search · hh.kz · weighted Fit Score</div>
+    <h1>Stop Applying Into the Void.<br/>Find Roles That Match Your <span class="grad">Logic.</span></h1>
+    <p class="sub">Upload your resume, describe the work you want, and IzdeMe semantically matches it against live <b>hh.kz</b> vacancies — scoring fit and showing exactly what to fix.</p>
+
+    <div class="steps">
+      <div class="step" id="step1"><span class="n">1</span> <b>Upload</b> resume</div>
+      <div class="step" id="step2"><span class="n">2</span> <b>Describe</b> the role</div>
+      <div class="step" id="step3"><span class="n">3</span> <b>Match</b> &amp; tailor</div>
+    </div>
+
+    <div class="search-shell">
+      <div class="search-box">
+        <svg class="lead" width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="m20 20-3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input id="prompt" placeholder='Describe a role… e.g. "Python and ecology" or "Data analyst, SQL"' autocomplete="off" />
+        <button class="btn-run" id="runBtn" onclick="runMatch()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Run Match
+        </button>
+      </div>
+      <div class="chips" id="chips"></div>
+    </div>
+
+    <div class="resume-shell">
+      <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+        <div class="dz-ico">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0L8 8m4-4 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <div class="dz-txt">
+          <b>Drop your resume here, or click to upload</b>
+          <span>PDF — parsed locally into skills, projects &amp; education for an accurate Fit Score</span>
+        </div>
+        <div class="dz-actions">
+          <button class="mini-btn" onclick="event.stopPropagation();loadSampleResume()">Use sample</button>
+        </div>
+        <input type="file" id="fileInput" accept="application/pdf,.pdf" hidden onchange="onFile(this.files[0])" />
+      </div>
+
+      <div class="profile" id="profile"></div>
+    </div>
+
+    <div class="source-note">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z" stroke="currentColor" stroke-width="1.6"/><path d="M12 8v5l3 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <span>Live vacancies via <b>hh.kz</b> API (Kazakhstan) · backend proxy → client → curated fallback</span>
+    </div>
+  </section>
+
+  <section id="results">
+    <div class="res-head">
+      <div>
+        <h2>System retrieved <b id="countLbl">top matches</b></h2>
+        <p id="queryEcho"></p>
+      </div>
+      <div class="res-meta">
+        <div class="meta-pill" id="srcPill">Source: <b>—</b></div>
+        <div class="meta-pill">Avg fit: <b id="avgFit">—</b></div>
+        <div class="meta-pill">Scanned: <b id="scannedLbl">—</b></div>
+      </div>
+    </div>
+    <div class="grid" id="grid"></div>
+    <div id="patchMount"></div>
+  </section>
+</main>
+
+<footer class="wrap" style="border:none">
+  IzdeMe MVP · semantic hh.kz matching · Fit Score = <b>Hard 40%</b> / <b>Experience 30%</b> / <b>Soft 30%</b> · vacancy data © HeadHunter (hh.kz)
+</footer>
+
+<!-- pdf.js for client-side resume parsing -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+</script>
+
+<script>
+/* ============================================================
+   IzdeMe — AI Career Agent (frontend)
+   Spec mapping:
+     • Semantic vacancy search (hh.kz)          → fetchVacancies()
+     • AI resume parsing PDF → JSON             → parseResume()
+     • Weighted Fit Score 40/30/30              → scoreVacancy()
+     • Explainability: matches/gaps/suggestions → buildExplain()
+   ============================================================ */
+
+const EXAMPLE_PROMPTS = [
+  "Python and ecology",
+  "Data analyst, SQL & dashboards",
+  "Frontend React engineer",
+  "Machine learning, computer vision",
+  "Backend developer, microservices",
+  "Product manager, fintech",
+];
+
+/* ---- lexicons ---- */
+const HARD_SKILLS = ["python","java","javascript","typescript","react","vue","angular","node.js","node",
+  "sql","postgresql","mysql","mongodb","nosql","redis","spark","hadoop","airflow","pandas","numpy",
+  "pytorch","tensorflow","scikit-learn","machine learning","deep learning","nlp","computer vision",
+  "data analysis","data science","etl","tableau","power bi","excel","statistics","docker","kubernetes",
+  "aws","gcp","azure","cloud","ci/cd","go","golang","rust","c++","c#",".net","php","ruby","kotlin",
+  "swift","flutter","django","flask","fastapi","spring","express","graphql","rest","api","microservices",
+  "linux","git","figma","selenium","cypress","seo","google analytics","crm","next.js","keras","opencv",
+  "matplotlib","seaborn","bigquery","snowflake","kafka","terraform","jenkins","jira","bash","scala",
+  "hive","dbt","langchain","llm","openai","jupyter","html","css","sass","tailwind","bootstrap","webpack",
+  "rabbitmq","grpc","oauth","jwt","unit testing","tdd","data visualization","a/b testing","etl"];
+const SOFT_SKILLS = ["communication","leadership","teamwork","collaboration","problem-solving","problem solving",
+  "agile","scrum","stakeholder","cross-functional","adaptability","mentoring","presentation","analytical",
+  "creativity","time management","ownership","critical thinking","negotiation","research","attention to detail",
+  "decision making","organization","planning","public speaking","fast learner","self-motivated","flexibility",
+  "empathy","multitasking","resourcefulness","accountability"];
+const DOMAINS = ["fintech","ecology","climate","sustainability","banking","e-commerce","healthcare","edtech",
+  "marketing","saas","b2b","gaming","logistics","cybersecurity","telecom","insurance","retail","energy"];
+const EDU_KEYS = ["university","institute","college","bachelor","master","msc","bsc","phd","b.sc","m.sc",
+  "nazarbayev","kbtu","diploma","degree","faculty","computer science","data science"];
+const SKILL_ALIASES = {"js":"javascript","ts":"typescript","reactjs":"react","react.js":"react",
+  "nodejs":"node.js","postgres":"postgresql","psql":"postgresql","k8s":"kubernetes","sklearn":"scikit-learn",
+  "scikit":"scikit-learn","tf":"tensorflow","powerbi":"power bi","power-bi":"power bi","restful":"rest",
+  "ml":"machine learning","dl":"deep learning","cv2":"computer vision","gcloud":"gcp","nextjs":"next.js",
+  "vuejs":"vue","csharp":"c#","c sharp":"c#","dotnet":".net","golang":"go","tailwindcss":"tailwind",
+  "k8":"kubernetes","gha":"ci/cd","github actions":"ci/cd","gitlab ci":"ci/cd","tensorflow2":"tensorflow"};
+const LANGUAGES = ["english","russian","kazakh","turkish","german","french","spanish","chinese","mandarin","arabic","korean","japanese","italian"];
+
+const ACR = {sql:"SQL",aws:"AWS",gcp:"GCP",api:"API",rest:"REST",nlp:"NLP",cv:"CV",qa:"QA",ui:"UI",ux:"UX",
+  seo:"SEO",crm:"CRM",b2b:"B2B",saas:"SaaS",ios:"iOS","ci/cd":"CI/CD",php:"PHP","c++":"C++","c#":"C#",
+  ".net":".NET","node.js":"Node.js","power bi":"Power BI","msc":"MSc","bsc":"BSc","etl":"ETL",
+  javascript:"JavaScript",typescript:"TypeScript",postgresql:"PostgreSQL",mysql:"MySQL",mongodb:"MongoDB",
+  nosql:"NoSQL",numpy:"NumPy",pytorch:"PyTorch",tensorflow:"TensorFlow","scikit-learn":"scikit-learn",
+  graphql:"GraphQL",github:"GitHub",opencv:"OpenCV","next.js":"Next.js",html:"HTML",css:"CSS",
+  llm:"LLM",devops:"DevOps",jwt:"JWT",oauth:"OAuth",grpc:"gRPC",tdd:"TDD","a/b testing":"A/B Testing",
+  bigquery:"BigQuery",openai:"OpenAI","data visualization":"Data Visualization"};
+function cap(w){const k=(w||"").toLowerCase();if(ACR[k])return ACR[k];
+  return (w||"").split(/(\s+|\/|-)/).map(x=>ACR[x.toLowerCase()]||(x.charAt(0).toUpperCase()+x.slice(1))).join("");}
+
+function tokenize(s){return (s||"").toLowerCase().replace(/[^a-z0-9+#.\s/-]/g," ").split(/\s+/).filter(Boolean);}
+function matchLexicon(text,lex){
+  const t=" "+(text||"").toLowerCase()+" ";const out=new Set();
+  for(const sk of lex){const re=new RegExp("(^|[^a-z0-9])"+sk.replace(/[.+*]/g,'\\$&')+"([^a-z0-9]|$)");if(re.test(t))out.add(sk);}
+  return [...out];
+}
+
+/* ---- curated fallback (KZ roles, hh.kz-style) ---- */
+const FALLBACK_POOL = [
+  {name:"Data Analyst",company:"GreenTech Solutions",area:"Almaty",salary:[450000,650000,"KZT"],experience:"1–3 years",schedule:"Full day",
+   requirements:"Python, SQL, statistics. Build dashboards, run climate impact analysis on energy data.",
+   responsibilities:"Cross-functional analytics with sustainability teams; communication and stakeholder reporting."},
+  {name:"Backend Developer (Python)",company:"FinFlow",area:"Astana",salary:[700000,1100000,"KZT"],experience:"3–6 years",schedule:"Full day",
+   requirements:"Python, Django, PostgreSQL, Docker, REST, microservices on AWS, CI/CD.",
+   responsibilities:"Design fintech services; agile delivery, ownership, code review and teamwork."},
+  {name:"Machine Learning Engineer",company:"Visionary AI",area:"Remote",salary:[900000,1500000,"KZT"],experience:"3–6 years",schedule:"Remote",
+   requirements:"Python, PyTorch, deep learning, computer vision, Docker, NumPy.",
+   responsibilities:"Train & deploy vision models; research, analytical thinking, cross-functional collaboration."},
+  {name:"Frontend Engineer (React)",company:"Pixel Forge",area:"Almaty",salary:[600000,950000,"KZT"],experience:"1–3 years",schedule:"Full day",
+   requirements:"JavaScript, TypeScript, React, GraphQL, Git, design systems.",
+   responsibilities:"Build SaaS UI; collaboration with design, communication, ownership."},
+  {name:"Data Scientist",company:"Kasaba Analytics",area:"Astana",salary:[800000,1300000,"KZT"],experience:"3–6 years",schedule:"Full day",
+   requirements:"Python, machine learning, SQL, statistics, Spark, scikit-learn.",
+   responsibilities:"End-to-end ML, A/B testing, analytical rigor, stakeholder communication."},
+  {name:"Product Manager",company:"Bereke Digital",area:"Almaty",salary:[850000,1400000,"KZT"],experience:"3–6 years",schedule:"Full day",
+   requirements:"Product, roadmap, agile, analytics, Jira. Fintech / banking domain.",
+   responsibilities:"Drive roadmap; stakeholder alignment, leadership, cross-functional communication."},
+  {name:"DevOps Engineer",company:"CloudPeak",area:"Remote",salary:[900000,1400000,"KZT"],experience:"3–6 years",schedule:"Remote",
+   requirements:"Docker, Kubernetes, AWS, CI/CD, Linux, infrastructure as code.",
+   responsibilities:"Run clusters, reliability engineering, ownership, teamwork."},
+  {name:"Marketing Analyst",company:"BrightReach",area:"Almaty",salary:[400000,600000,"KZT"],experience:"1–3 years",schedule:"Full day",
+   requirements:"SEO, Google Analytics, Excel, CRM, B2B SaaS marketing.",
+   responsibilities:"Campaign analytics, content, cross-functional communication, presentation."},
+  {name:"Mobile Developer (Flutter)",company:"Tap Labs",area:"Astana",salary:[650000,1000000,"KZT"],experience:"1–3 years",schedule:"Full day",
+   requirements:"Flutter, Dart, REST, Git, mobile architecture.",
+   responsibilities:"Ship cross-platform app; ownership, teamwork, problem-solving."},
+  {name:"QA Automation Engineer",company:"TestForge",area:"Remote",salary:[550000,850000,"KZT"],experience:"1–3 years",schedule:"Remote",
+   requirements:"Selenium, Cypress, Python, automation, API testing.",
+   responsibilities:"Build test suites, CI integration, analytical, attention to detail."},
+  {name:"Full-Stack Engineer (Node + React)",company:"Stacklore",area:"Almaty",salary:[750000,1200000,"KZT"],experience:"3–6 years",schedule:"Full day",
+   requirements:"Node.js, React, TypeScript, PostgreSQL, REST, Docker.",
+   responsibilities:"Own features end-to-end; collaboration, communication, agile."},
+  {name:"Business / Data Analyst",company:"NurMetrics",area:"Astana",salary:[500000,750000,"KZT"],experience:"1–3 years",schedule:"Full day",
+   requirements:"SQL, Excel, Power BI, statistics, data analysis.",
+   responsibilities:"Translate questions into queries; stakeholder reporting, communication."},
+  {name:"NLP Engineer",company:"LinguaCore",area:"Remote",salary:[950000,1600000,"KZT"],experience:"3–6 years",schedule:"Remote",
+   requirements:"Python, NLP, PyTorch, machine learning, API deployment.",
+   responsibilities:"Build NLP/LLM pipelines; research, analytical, cross-functional."},
+  {name:"UX/UI Designer",company:"Form & Function",area:"Almaty",salary:[500000,800000,"KZT"],experience:"1–3 years",schedule:"Full day",
+   requirements:"Figma, UI, UX, prototyping, user research.",
+   responsibilities:"Design product flows; collaboration with product, communication, creativity."},
+];
+
+/* ---------- resume parsing (PDF text → structured JSON) ---------- */
+async function extractPdfText(file){
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+  const lines=[];
+  for(let i=1;i<=pdf.numPages;i++){
+    const page=await pdf.getPage(i);
+    const c=await page.getTextContent();
+    // Reconstruct visual lines from item coordinates so section headers and
+    // bullets survive — flattening to spaces badly mangles resume layout.
+    const rows=[];
+    for(const it of c.items){
+      if(!it.str || !it.str.trim()) continue;
+      const y=Math.round(it.transform[5]), x=it.transform[4];
+      let row=rows.find(r=>Math.abs(r.y-y)<=3.5);
+      if(!row){ row={y,items:[]}; rows.push(row); }
+      row.items.push({x,str:it.str});
+    }
+    rows.sort((a,b)=>b.y-a.y);            // top → bottom (PDF y grows upward)
+    for(const r of rows){
+      r.items.sort((a,b)=>a.x-b.x);
+      const line=r.items.map(o=>o.str).join(" ").replace(/\s+/g," ").trim();
+      if(line) lines.push(line);
+    }
+    lines.push("");                        // page break
+  }
+  return lines.join("\n");
+}
+function expandAliases(text){
+  let t=" "+String(text).toLowerCase()+" ";
+  for(const a in SKILL_ALIASES){
+    const re=new RegExp("(^|[^a-z0-9])"+a.replace(/[.+*]/g,'\\$&')+"([^a-z0-9]|$)","g");
+    t=t.replace(re,"$1"+SKILL_ALIASES[a]+"$2");
+  }
+  return t;
+}
+// Years of experience: sum MERGED work-date ranges, excluding education lines,
+// and honour an explicit "N years" statement — take whichever is larger.
+function computeYears(text){
+  const now=new Date().getFullYear();
+  const isEdu=l=>/\b(university|institute|college|bachelor|master|bsc|msc|ph\.?d|diploma|degree|faculty|gpa|школа|gymnasium|lyceum)\b/i.test(l);
+  let explicit=0; const intervals=[];
+  for(const line of text.split(/\n/)){
+    if(isEdu(line)) continue;                         // a degree's dates are not work experience
+    const e=line.match(/(\d{1,2})\s*\+?\s*(?:years|yrs|year|год|года|лет)\b/i);
+    if(e) explicit=Math.max(explicit,parseInt(e[1]));
+    // start year — separator — (optional month word) end year / present
+    const re=/((?:19|20)\d{2})\s*(?:[-–—]|to)\s*(?:[a-zа-яё.]+\s+)?(present|current|now|настоящее|(?:19|20)\d{2})/gi; let m;
+    while((m=re.exec(line))){
+      const s=parseInt(m[1]); const end=/present|current|now|настоящее/i.test(m[2])?now:parseInt(m[2]);
+      if(end>=s && end-s<=45) intervals.push([s,end]);
+    }
+  }
+  intervals.sort((a,b)=>a[0]-b[0]);
+  let span=0,cs=null,ce=null;
+  for(const [s,e] of intervals){
+    if(cs===null){cs=s;ce=e;continue;}
+    if(s<=ce) ce=Math.max(ce,e);                       // overlap → merge
+    else { span+=ce-cs; cs=s; ce=e; }
+  }
+  if(cs!==null) span+=ce-cs;
+  return Math.max(explicit,span);
+}
+// Name + current title from the resume header (first few lines)
+function extractIdentity(lines){
+  let name="",title="";
+  for(let i=0;i<Math.min(lines.length,7);i++){
+    const l=(lines[i]||"").trim(); if(!l) continue;
+    if(!name && l.length<=42 && !/[@\d]/.test(l) &&
+       /^[A-ZА-ЯЁ][\p{L}.'-]+(?:\s+[A-ZА-ЯЁ][\p{L}.'-]+){1,3}$/u.test(l)){ name=l; continue; }
+    if(!title && l.length<=70 &&
+       /(developer|engineer|analyst|manager|designer|scientist|intern|specialist|consultant|lead|architect|student|administrator|marketer|researcher|recruiter|accountant|teacher|qa|devops)/i.test(l)){
+      title=l.split(/\s*[|•·–—]\s*/)[0].trim();
+      if(name) break;
+    }
+  }
+  return {name,title};
+}
+function parseResume(text){
+  const lines=text.split(/\n/).map(l=>l.replace(/\s+/g," ").trim());
+  const skills = matchLexicon(expandAliases(text), HARD_SKILLS);
+  const soft = matchLexicon(text, SOFT_SKILLS);
+  const domains = matchLexicon(text, DOMAINS);
+  const languages = matchLexicon(text, LANGUAGES).map(cap);
+  const years = computeYears(text);
+  const {name,title} = extractIdentity(lines);
+
+  // education — collect institution/degree lines, prefer the most specific
+  const educationList=[];
+  for(const l of lines){
+    if(l && l.length<=140 && EDU_KEYS.some(k=>l.toLowerCase().includes(k)) && !educationList.includes(l)) educationList.push(l);
+    if(educationList.length>=3) break;
+  }
+  let education=(educationList.find(l=>/university|institute|college|nazarbayev|kbtu|sdu|aitu/i.test(l))||educationList[0]||"Not detected").slice(0,120);
+
+  // certifications
+  const certifications=[];
+  for(const l of lines){
+    if(/\b(certified|certificate|certification|nanodegree|coursera|udacity)\b/i.test(l) && l.length<100){
+      const c=l.replace(/^[•\-\*•\s]+/,"").trim(); if(c && !certifications.includes(c)) certifications.push(c);
+    }
+    if(certifications.length>=3) break;
+  }
+
+  // projects / experience — section-aware, action-verb or bulleted lines
+  const verbs=/\b(built|build|developed|develop|created|create|designed|design|implemented|implement|led|deployed|deploy|analyzed|analyze|automated|automate|trained|train|engineered|optimized|optimize|launched|launch|managed|manage|architected|improved|improve|delivered|deliver|integrated|integrate)\b/i;
+  const HEAD=/^(projects?|experience|work experience|professional experience|employment|selected projects|key projects)\b/i;
+  const OTHER=/^(education|skills|technical skills|summary|objective|contact|certifications?|languages?|awards?|interests?|references?|profile)\b/i;
+  const bulletRe=/^[•\-\*•▪●–—]/;
+  const tidy=l=>l.replace(/^[•\-\*•▪●–—\s]+/,"").replace(/\s+/g," ").trim();
+  const projects=[]; const seen=new Set();
+  const add=l=>{ l=tidy(l); if(l.length<15||l.length>160) return; const k=l.toLowerCase().slice(0,45);
+    if(seen.has(k)) return; seen.add(k); projects.push(l.length>140?l.slice(0,137).replace(/\s+\S*$/,"")+"…":l); };
+  let inSec=false;
+  for(const l of lines){
+    if(HEAD.test(l)){ inSec=true; continue; }
+    if(OTHER.test(l)){ inSec=false; continue; }
+    if(verbs.test(l) || (inSec && bulletRe.test(l))) add(l);
+    if(projects.length>=4) break;
+  }
+  if(!projects.length){
+    if(domains[0]&&skills[0]) projects.push(`${cap(skills[0])} project in ${cap(domains[0])}`);
+    if(skills[1]) projects.push(`${cap(skills[1])} / ${cap(skills[2]||"data")} work`);
+  }
+
+  const ttl=(title||"").toLowerCase();
+  const seniority = /senior|lead|principal|head/.test(ttl) ? "senior"
+                  : /junior|intern|trainee|student/.test(ttl) ? "junior"
+                  : years>=6?"senior":years>=3?"middle":years>=1?"junior":"";
+  return { name, title, skills, soft, domains, projects, experience:[], education,
+    educationList, languages, certifications, seniority, years };
+}
+
+/* ---------- weighted Fit Score (Hard 40 / Experience 30 / Soft 30) ---------- */
+function vacancyProfile(v){
+  const blob=`${v.name} ${v.requirements||""} ${v.responsibilities||""} ${v.description||""}`;
+  return {
+    hard: matchLexicon(blob, HARD_SKILLS),
+    soft: matchLexicon(blob, SOFT_SKILLS),
+    domains: matchLexicon(blob, DOMAINS),
+    text: blob.toLowerCase(),
+  };
+}
+function expLevel(str){ if(!str) return 1; const s=str.toLowerCase();
+  if(/(нет опыта|no experience|<\s*1|junior|intern)/.test(s)) return 0;
+  if(/6|более 6|senior|6\+/.test(s)) return 3; if(/3|middle/.test(s)) return 2; return 1; }
+
+function scoreVacancy(resume, v){
+  const vp = vacancyProfile(v);
+
+  // 1) HARD SKILLS — 40%
+  const hardMatches = vp.hard.filter(s=>resume.skills.includes(s));
+  const hardGaps    = vp.hard.filter(s=>!resume.skills.includes(s));
+  const hardScore   = vp.hard.length ? hardMatches.length/vp.hard.length : (resume.skills.length?0.6:0.4);
+
+  // 2) PROJECTS / EXPERIENCE — 30%
+  const projText = (resume.projects.join(" ")+" "+resume.skills.join(" ")+" "+resume.domains.join(" ")).toLowerCase();
+  const respHits = vp.hard.filter(s=>projText.includes(s)).length;
+  const projScore = vp.hard.length ? respHits/vp.hard.length : 0.5;
+  const domHit = vp.domains.some(d=>resume.domains.includes(d)) ? 1 : (vp.domains.length?0.4:0.6);
+  const need = expLevel(v.experience);
+  const have = resume.years>=6?3:resume.years>=3?2:resume.years>=1?1:0;
+  const senScore = have>=need ? 1 : Math.max(0.3, 1-(need-have)*0.32);
+  const expScore = projScore*0.55 + senScore*0.3 + domHit*0.15;
+
+  // 3) SOFT SKILLS — 30%
+  const softMatches = vp.soft.filter(s=>resume.soft.includes(s));
+  const softGaps    = vp.soft.filter(s=>!resume.soft.includes(s));
+  const softScore   = vp.soft.length ? (0.45 + 0.55*(softMatches.length/vp.soft.length)) : 0.6;
+
+  const overall = hardScore*0.40 + expScore*0.30 + softScore*0.30;
+  const pct = Math.max(35, Math.min(99, Math.round(overall*100)));
+
+  return {
+    score: pct,
+    breakdown: {
+      hard: Math.round(hardScore*100),
+      exp:  Math.round(expScore*100),
+      soft: Math.round(softScore*100),
+    },
+    matches: hardMatches,
+    gaps: hardGaps,
+    softGaps,
+    vp,
+  };
+}
+
+/* ---------- explainability: matches / gaps / suggestions ---------- */
+function buildExplain(resume, v, a){
+  const matches = a.matches.slice(0,6);
+  const gaps = a.gaps.slice(0,5);
+  const suggestions = [];
+  for(const g of gaps.slice(0,3)) suggestions.push(`Add <b>${cap(g)}</b> — required here but missing from your resume.`);
+  if(a.breakdown.exp < 60 && resume.years<3) suggestions.push(`Highlight a hands-on project to lift your experience score (${a.breakdown.exp}%).`);
+  if(a.softGaps.length && a.breakdown.soft<70) suggestions.push(`Mention <b>${cap(a.softGaps[0])}</b> to strengthen soft-skill fit.`);
+  if(!suggestions.length) suggestions.push(`Strong match — emphasise <b>${cap(matches[0]||resume.skills[0]||"your core skill")}</b> in your summary and apply.`);
+  return { matches, gaps, suggestions: suggestions.slice(0,3) };
+}
+
+/* ---------- vacancy fetch: backend hh.kz → client hh.kz → fallback ---------- */
+async function fetchVacancies(query){
+  // tier 1: our backend proxy (proper User-Agent, area=40/host=hh.kz)
+  try{
+    const r = await fetch("/api/vacancies?text="+encodeURIComponent(query)+"&per_page=30");
+    if(r.ok){ const j=await r.json(); if(j.items&&j.items.length) return {items:j.items, source:"hh.kz · backend"}; }
+  }catch(e){}
+  // tier 2: direct client call (works from a real residential browser; CORS is open)
+  try{
+    const u="https://api.hh.ru/vacancies?area=40&host=hh.kz&order_by=relevance&per_page=30&text="+encodeURIComponent(query);
+    const ctrl=new AbortController(); const t=setTimeout(()=>ctrl.abort(),6000);
+    const r=await fetch(u,{signal:ctrl.signal,headers:{Accept:"application/json"}}); clearTimeout(t);
+    if(r.ok){ const j=await r.json(); if(j.items&&j.items.length){
+      return {source:"hh.kz · direct", items:j.items.map(v=>({
+        name:v.name, company:v.employer?.name||"Company", area:v.area?.name||"—",
+        salary:v.salary?[v.salary.from,v.salary.to,v.salary.currency]:null, url:v.alternate_url,
+        experience:v.experience?.name||null, schedule:v.schedule?.name||null,
+        requirements:(v.snippet?.requirement||"").replace(/<\/?highlighttext>/g,""),
+        responsibilities:(v.snippet?.responsibility||"").replace(/<\/?highlighttext>/g,""),
+      }))};
+    }}
+  }catch(e){}
+  // tier 3: curated fallback
+  return {items:FALLBACK_POOL.map(x=>({...x})), source:"curated demo set"};
+}
+
+/* ---------- formatting ---------- */
+function fmtSalary(s){
+  if(!s) return '<span>Salary undisclosed</span>';
+  const [from,to,cur]=s; const c=(cur||"KZT").replace("KZT","₸").replace("RUR","₽").replace("USD","$").replace("EUR","€");
+  const f=n=>n?Number(n).toLocaleString("en-US"):null;
+  if(from&&to) return `${f(from)}–${f(to)} <span>${c}/mo</span>`;
+  if(from) return `from ${f(from)} <span>${c}/mo</span>`;
+  if(to) return `up to ${f(to)} <span>${c}/mo</span>`;
+  return '<span>Salary undisclosed</span>';
+}
+
+/* ---------- state ---------- */
+let RESUME=null, CURRENT={vacancies:[],source:null,query:""};
+let AI_ENABLED=false, AI_MODEL="";
+
+/* ---------- OpenAI-backed enhancers (fall back to local heuristics) ---------- */
+async function aiParseResume(text){
+  if(!AI_ENABLED) return null;
+  try{
+    const r=await fetch("/api/ai/parse-resume",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text})});
+    if(!r.ok) return null;
+    const j=await r.json(); const R=j.resume; if(!R) return null;
+    const low=a=>(Array.isArray(a)?a:[]).map(s=>String(s).toLowerCase());
+    const arr=a=>Array.isArray(a)?a:[];
+    // education may be an array of {degree,institution,year} or a string
+    let education="Not detected", educationList=[];
+    if(Array.isArray(R.education)&&R.education.length){
+      educationList=R.education;
+      const e=R.education[0];
+      education=[e.degree,e.institution].filter(Boolean).join(", ")+(e.year?` (${e.year})`:"")||"Not detected";
+    }else if(typeof R.education==="string"&&R.education) education=R.education;
+    // experience may be objects; flatten to readable strings for the project list too
+    const experience=arr(R.experience);
+    const expStrings=experience.map(e=>[e.title,e.company].filter(Boolean).join(" @ ")).filter(Boolean);
+    return {
+      skills:low(R.skills), soft:low(R.soft), domains:low(R.domains),
+      projects:arr(R.projects).length?arr(R.projects):expStrings,
+      experience, education, educationList,
+      languages:arr(R.languages).map(cap), certifications:arr(R.certifications),
+      seniority:(R.seniority||"").toLowerCase(), name:R.name||"", title:R.title||"",
+      years:Number(R.years)||0, _ai:true
+    };
+  }catch(e){return null;}
+}
+function markKeywords(text,words){
+  const uniq=[...new Set(words.map(w=>cap(w)).filter(Boolean))].sort((a,b)=>b.length-a.length);
+  let out=String(text);
+  for(const w of uniq){
+    const re=new RegExp("(?![^<]*>)\\b("+w.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+")\\b","gi");
+    out=out.replace(re,"<mark>$1</mark>");
+  }
+  return out;
+}
+async function aiTailorPatch(idx){
+  if(!AI_ENABLED) return;
+  const item=CURRENT.vacancies[idx];
+  try{
+    const r=await fetch("/api/ai/tailor",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({resume:{skills:RESUME.skills,soft:RESUME.soft,domains:RESUME.domains,projects:RESUME.projects,years:RESUME.years,education:RESUME.education},vacancy:item})});
+    if(!r.ok) return;
+    const j=await r.json();
+    if(CURRENT.vacancies[idx]!==item) return; // user moved on
+    const el=document.getElementById("resumeText");
+    if(el&&j.summary) el.innerHTML=markKeywords(j.summary,[...(RESUME.skills||[]),...(j.matches||[]),item.company]);
+    const pill=document.getElementById("aiPill"); if(pill) pill.style.display="inline-flex";
+  }catch(e){}
+}
+
+/* ---------- profile rendering ---------- */
+function renderProfile(){
+  if(!RESUME) return;
+  const p=document.getElementById("profile");
+  const esc=s=>String(s).replace(/</g,"&lt;");
+  const chips=(arr,cls)=>arr&&arr.length?arr.map(s=>`<span class="pchip ${cls}">${esc(cap(s))}</span>`).join(""):'<span class="v">—</span>';
+  const trunc=(s,n)=>s.length>n?esc(s.slice(0,n))+"…":esc(s);
+  const json=JSON.stringify({
+    name:RESUME.name||undefined, title:RESUME.title||undefined,
+    skills:RESUME.skills, soft:RESUME.soft,
+    experience:(RESUME.experience&&RESUME.experience.length)?RESUME.experience:undefined,
+    projects:RESUME.projects,
+    education:(RESUME.educationList&&RESUME.educationList.length)?RESUME.educationList:RESUME.education,
+    domains:RESUME.domains, languages:RESUME.languages||[], certifications:RESUME.certifications||[],
+    seniority:RESUME.seniority||"", years:RESUME.years
+  },null,2);
+
+  let extra="";
+  if(RESUME.experience&&RESUME.experience.length){
+    const items=RESUME.experience.slice(0,3).map(e=>{
+      const head=[e.title,e.company].filter(Boolean).join(" @ ");
+      const dates=(e.start||e.end)?` (${[e.start,e.end].filter(Boolean).join("–")})`:"";
+      return esc(head+dates);
+    }).filter(Boolean);
+    extra+=`<div class="pg-block"><div class="lbl">Experience</div><div class="vals"><span class="v">${items.join("<br>")||"—"}</span></div></div>`;
+  }
+  if(RESUME.languages&&RESUME.languages.length)
+    extra+=`<div class="pg-block"><div class="lbl">Languages</div><div class="vals">${chips(RESUME.languages,"")}</div></div>`;
+  if(RESUME.certifications&&RESUME.certifications.length)
+    extra+=`<div class="pg-block"><div class="lbl">Certifications</div><div class="vals"><span class="v">${RESUME.certifications.map(c=>esc(c)).join(" · ")}</span></div></div>`;
+
+  const tag=RESUME._ai?`<span style="color:var(--accent)">OpenAI</span>`:"local parser";
+  p.innerHTML=`
+    <div class="profile-head">
+      <div class="l">
+        <div class="ok-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="m20 6-11 11-5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div><h4>Resume parsed${RESUME.name?` — ${esc(RESUME.name)}`:""}</h4><p>${RESUME.skills.length} hard · ${RESUME.soft.length} soft · ${RESUME.years||"–"} yrs${RESUME.seniority?` · ${cap(RESUME.seniority)}`:""} · ${tag}</p></div>
+      </div>
+      <button class="mini-btn" onclick="document.getElementById('fileInput').click()">Replace</button>
+    </div>
+    <div class="profile-grid">
+      <div class="pg-block"><div class="lbl">Hard skills</div><div class="vals">${chips(RESUME.skills,"hard")}</div></div>
+      <div class="pg-block"><div class="lbl">Soft skills</div><div class="vals">${chips(RESUME.soft,"soft")}</div></div>
+      <div class="pg-block"><div class="lbl">Education</div><div class="vals"><span class="v">${esc(RESUME.education)}</span></div></div>
+      <div class="pg-block"><div class="lbl">Projects</div><div class="vals"><span class="v">${RESUME.projects.length?RESUME.projects.slice(0,2).map(x=>trunc(x,72)).join("<br>"):"—"}</span></div></div>
+      ${extra}
+    </div>
+    <button class="json-toggle" style="margin-top:12px" onclick="document.getElementById('pjson').classList.toggle('show')">⟨ ⟩ view parsed JSON</button>
+    <pre class="json" id="pjson">${esc(json)}</pre>`;
+  p.classList.add("show");
+  document.getElementById("step1").classList.add("done");
+}
+
+async function onFile(file){
+  if(!file) return;
+  if(!window.pdfjsLib){ alert("PDF engine still loading — try again in a moment."); return; }
+  const dz=document.getElementById("dropzone");
+  dz.querySelector(".dz-txt b").textContent="Parsing "+file.name+"…";
+  try{
+    const text=await extractPdfText(file);
+    RESUME=parseResume(text);          // local baseline (instant)
+    renderProfile();
+    if(AI_ENABLED){                    // enrich with OpenAI if configured
+      dz.querySelector(".dz-txt b").textContent="Enhancing with OpenAI…";
+      const ai=await aiParseResume(text);
+      if(ai){ RESUME={...RESUME,...ai}; renderProfile(); }
+    }
+    if(CURRENT.query) runMatch();
+  }catch(e){
+    dz.querySelector(".dz-txt b").textContent="Couldn't read that PDF — try another, or use the sample.";
+    console.error(e);
+  }
+}
+
+function loadSampleResume(){
+  const sample=`Murat Askarov — Computer Science student, Nazarbayev University (BSc).
+  Skills: Python, SQL, Pandas, NumPy, scikit-learn, data analysis, statistics, Git, Docker.
+  Soft skills: communication, teamwork, analytical, problem-solving.
+  Projects: Built a climate data analysis pipeline in Python; developed a SQL dashboard for energy metrics;
+  trained a scikit-learn model for forecasting. Domains: ecology, sustainability, data science. 2 years experience.`;
+  RESUME=parseResume(sample);
+  renderProfile();
+  if(!document.getElementById("prompt").value) document.getElementById("prompt").value="Python and ecology";
+  if(CURRENT.query||document.getElementById("results").classList.contains("show")) runMatch();
+}
+
+/* ---------- card rendering ---------- */
+function ringCol(p){return p>=85?"var(--green)":p>=68?"var(--amber)":"var(--red)";}
+function ringHex(p){return p>=85?"#27d39a":p>=68?"#ffb44d":"#ff6b6b";}
+function barCol(k){return k==="hard"?"var(--hard)":k==="exp"?"var(--exp)":"var(--soft)";}
+
+function card(item, idx){
+  const a=item._a, ex=item._ex, top=idx<3;
+  const initials=item.company.replace(/[^A-Za-zА-Яа-я ]/g,"").trim().split(/\s+/).slice(0,2).map(w=>w[0]||"").join("").toUpperCase()||"·";
+  const bd=a.breakdown;
+  const bar=(lbl,w,pct,k)=>`<div class="bd-row"><span class="bk">${lbl} <small>${w}</small></span><div class="bar"><i style="width:${pct}%;background:${barCol(k)}"></i></div><span class="pc">${pct}</span></div>`;
+  const vmeta=[item.experience,item.schedule,item.area].filter(Boolean).map(x=>`<span class="vmeta">${x}</span>`).join("");
+  const matchTags=ex.matches.length?ex.matches.map(s=>`<span class="ex-tag m">${cap(s)}</span>`).join(""):'<span class="ex-tag">transferable skills</span>';
+  const gapTags=ex.gaps.length?ex.gaps.map(s=>`<span class="ex-tag g">${cap(s)}</span>`).join(""):'<span class="ex-tag m">no critical gaps</span>';
+  const sug=ex.suggestions.map(s=>`<li>${s}</li>`).join("");
+  return `
+  <div class="card ${top?'top':''}" style="animation-delay:${idx*50}ms">
+    <span class="rank">#${idx+1}</span>
+    <div class="card-top">
+      <div style="flex:1">
+        <h3>${item.name}</h3>
+        <div class="company"><span class="logo">${initials}</span>${item.company} · ${item.area}</div>
+      </div>
+      <div class="fit-ring" style="--p:${a.score};--ring-col:${ringCol(a.score)}">
+        <span class="num" style="color:${ringHex(a.score)}">${a.score}%</span><span class="lbl">FIT</span>
+      </div>
+    </div>
+    <div class="salary">${fmtSalary(item.salary)}</div>
+    ${vmeta?`<div class="vac-meta">${vmeta}</div>`:""}
+    <div class="breakdown">
+      ${bar("Hard","40%",bd.hard,"hard")}
+      ${bar("Experience","30%",bd.exp,"exp")}
+      ${bar("Soft","30%",bd.soft,"soft")}
+    </div>
+    <div class="explain">
+      <div class="ex-block match"><div class="ex-h"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="m20 6-11 11-5-5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Matches</div><div class="ex-tags">${matchTags}</div></div>
+      <div class="ex-block gap"><div class="ex-h"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 8v5M12 16h.01" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/></svg>Gaps</div><div class="ex-tags">${gapTags}</div></div>
+      <div class="ex-block sug"><div class="ex-h"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 1 4 10.5c-.6.6-1 1.3-1 2.5H9c0-1.2-.4-1.9-1-2.5A6 6 0 0 1 12 3Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Suggestions</div><ul class="sug-list">${sug}</ul></div>
+    </div>
+    <div class="card-actions">
+      <button class="btn-ghost primary" onclick="selectRole(${idx})">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9.94 14.06 4 20m0 0h4m-4 0v-4M14.06 9.94 20 4m0 0h-4m4 0v4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Tailor Resume
+      </button>
+      ${item.url?`<a class="btn-ghost" href="${item.url}" target="_blank" rel="noopener" title="Open on hh.kz" style="flex:0 0 auto;padding:11px 14px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M7 17 17 7M17 7H9m8 0v8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></a>`:""}
+    </div>
+  </div>`;
+}
+
+/* ---------- resume patch (tailored summary) ---------- */
+function renderResume(idx){
+  const item=CURRENT.vacancies[idx], a=item._a, ex=item._ex;
+  const mk=w=>`<mark>${w}</mark>`;
+  const matched=ex.matches.length?ex.matches:(RESUME?RESUME.skills.slice(0,3):["data"]);
+  const gap=ex.gaps[0];
+  let txt=`Results-driven candidate with proven strength in ${matched.slice(0,2).map(cap).map(mk).join(" and ")||"core analytics"}. `;
+  txt+=`Hands-on experience delivering ${mk(item.name.toLowerCase())}-aligned work`;
+  if(RESUME&&RESUME.domains[0]) txt+=` in ${mk(cap(RESUME.domains[0]))}`;
+  txt+=` that maps directly to ${mk(item.company)}'s requirements`;
+  if(matched.length>2) txt+=`, applying ${matched.slice(2,4).map(cap).map(mk).join(" and ")}`;
+  txt+=`. `;
+  if(gap) txt+=`Currently building ${mk(cap(gap))} to fully close the role's gap. `;
+  txt+=`Brings structured logic, fast iteration and clear communication.`;
+  document.getElementById("patchMount").innerHTML=`
+  <div class="patch">
+    <div class="patch-head">
+      <div class="patch-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></div>
+      <div style="flex:1"><h3>AI Resume Patch <span id="aiPill" style="display:none;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--accent);border:1px solid rgba(167,139,250,.35);background:rgba(124,92,255,.12);padding:3px 9px;border-radius:999px;vertical-align:middle;margin-left:6px">✦ OpenAI ${AI_MODEL}</span></h3><p>Tailored summary for <b>${item.name}</b> @ ${item.company} · ${a.score}% fit</p></div>
+    </div>
+    <div class="patch-body">
+      <div class="resume-text" id="resumeText">${txt}</div>
+      <div class="patch-foot">
+        <span class="hint">Highlighted terms are injected from your resume + this listing's keywords to close detected gaps.</span>
+        <button class="btn-copy" id="copyBtn" onclick="copyResume()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10" stroke="currentColor" stroke-width="2"/></svg> Copy to Clipboard</button>
+      </div>
+    </div>
+  </div>`;
+  document.querySelectorAll('.card').forEach((c,i)=>c.classList.toggle('top',i===idx||i<3));
+  if(AI_ENABLED) aiTailorPatch(idx);   // overwrite summary with OpenAI version when ready
+}
+function selectRole(idx){renderResume(idx);document.getElementById("patchMount").scrollIntoView({behavior:"smooth",block:"center"});}
+function copyResume(){
+  const t=document.getElementById("resumeText").innerText;
+  navigator.clipboard.writeText(t).then(()=>{const b=document.getElementById("copyBtn");b.classList.add("done");
+    b.innerHTML='<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="m20 6-11 11-5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Copied!';
+    setTimeout(()=>{b.classList.remove("done");b.innerHTML='<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10" stroke="currentColor" stroke-width="2"/></svg> Copy to Clipboard';},1900);
+  }).catch(()=>{});
+}
+
+/* ---------- main ---------- */
+async function runMatch(){
+  const query=document.getElementById("prompt").value.trim();
+  if(!query){ document.getElementById("prompt").focus(); return; }
+  CURRENT.query=query;
+  document.getElementById("step2").classList.add("done");
+
+  // No resume yet → derive a lightweight profile from the query so it still works.
+  if(!RESUME){ RESUME=parseResume(query+" "+query); RESUME._fromQuery=true; }
+
+  const btn=document.getElementById("runBtn");
+  btn.disabled=true;
+  btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="animation:spin 1s linear infinite"><path d="M12 3a9 9 0 1 0 9 9" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg> Matching…';
+  const res=document.getElementById("results"); res.classList.add("show");
+  document.getElementById("grid").innerHTML='<div class="skel-grid">'+Array(6).fill('<div class="skel"></div>').join("")+'</div>';
+  document.getElementById("patchMount").innerHTML="";
+
+  const {items,source}=await fetchVacancies(query);
+
+  // semantic-ish relevance to the query (keeps only roles related to the prompt)
+  const qWords=tokenize(query).filter(w=>w.length>2);
+  const qSkills=matchLexicon(query,HARD_SKILLS.concat(DOMAINS));
+  items.forEach(it=>{
+    it._a=scoreVacancy(RESUME,it);
+    const blob=(it.name+" "+(it.requirements||"")+" "+(it.responsibilities||"")).toLowerCase();
+    let rel=0; qWords.forEach(w=>{if(blob.includes(w))rel++;}); qSkills.forEach(s=>{if(blob.includes(s))rel+=2;});
+    it._rel=rel;
+    it._ex=buildExplain(RESUME,it,it._a);
+  });
+  // rank: blend query relevance with fit score
+  items.sort((a,b)=> (b._rel*8+b._a.score) - (a._rel*8+a._a.score));
+  const top=items.slice(0,10);
+  CURRENT.vacancies=top; CURRENT.source=source;
+  document.getElementById("step3").classList.add("done");
+
+  document.getElementById("grid").innerHTML=top.map(card).join("");
+  document.getElementById("countLbl").textContent=`top ${top.length} matches`;
+  const detected=RESUME._fromQuery?qSkills.map(cap):RESUME.skills.slice(0,6).map(cap);
+  document.getElementById("queryEcho").innerHTML=`Query: “${query}” · matching against ${RESUME._fromQuery?"query profile":"your resume"} (${detected.join(", ")||"general"})`;
+  const avg=Math.round(top.reduce((s,v)=>s+v._a.score,0)/top.length);
+  document.getElementById("avgFit").textContent=avg+"%";
+  document.getElementById("scannedLbl").textContent=items.length+(source.startsWith("hh")?" live listings":" roles");
+  const live=source.startsWith("hh");
+  document.getElementById("srcPill").innerHTML=`Source: <b style="color:${live?'var(--green)':'var(--amber)'}">● ${source}</b>`;
+
+  renderResume(0);
+  btn.disabled=false;
+  btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg> Run Match';
+  res.scrollIntoView({behavior:"smooth",block:"start"});
+}
+
+function resetApp(){document.getElementById("results").classList.remove("show");document.getElementById("prompt").value="";window.scrollTo({top:0,behavior:"smooth"});}
+
+/* ---------- drag & drop ---------- */
+(function init(){
+  document.getElementById("chips").innerHTML=EXAMPLE_PROMPTS.map(p=>`<span class="chip" onclick="useChip(this)">${p}</span>`).join("");
+  document.getElementById("prompt").addEventListener("keydown",e=>{if(e.key==="Enter")runMatch();});
+  // detect OpenAI backend
+  fetch("/api/ai/status").then(r=>r.json()).then(j=>{
+    AI_ENABLED=!!j.enabled; AI_MODEL=j.model||"";
+    if(AI_ENABLED){
+      document.querySelector(".badge").innerHTML='<span class="dot"></span> Semantic search · hh.kz · OpenAI '+AI_MODEL;
+      const sub=document.querySelector("#dropzone .dz-txt span");
+      if(sub) sub.textContent="PDF — parsed by OpenAI into skills, projects & education for an accurate Fit Score";
+    }
+  }).catch(()=>{});
+  const dz=document.getElementById("dropzone");
+  ["dragover","dragenter"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add("drag");}));
+  ["dragleave","drop"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove("drag");}));
+  dz.addEventListener("drop",e=>{const f=e.dataTransfer.files[0];if(f)onFile(f);});
+})();
+function useChip(el){document.getElementById("prompt").value=el.textContent;runMatch();}
+</script>
+</body>
+</html>

@@ -1,0 +1,87 @@
+# IzdeMe — AI Career Agent (MVP)
+
+Semantic **hh.kz** vacancy matching + AI resume parsing + a weighted, explainable **Fit Score**.
+Built to the `ТЗ_Izdeme` MVP spec.
+
+```
+Frontend (index.html)  ──▶  Backend API (server.js)  ──▶  Job Fetcher → hh.kz
+   │  pdf.js resume parsing                  │  proper User-Agent, area=40
+   │  Fit Score 40/30/30                      │  /api/vacancies, /api/health
+   └─ matches / gaps / suggestions           └─ curated fallback on block
+```
+
+## Run
+
+```bash
+git clone https://github.com/Matol03/izdeme.git
+cd izdeme
+cp .env.example .env        # adjust if needed (add OPENAI_API_KEY to enable AI)
+node server.js              # → http://localhost:4173   (Node 18+)
+```
+
+No `npm install` required — the backend uses only Node built-ins.
+
+## Spec coverage
+
+| Spec requirement | Where |
+|---|---|
+| Semantic vacancy search (hh.kz), 3–10 results | `fetchVacancies()` + `/api/vacancies` (area=40, host=hh.kz) |
+| AI resume parsing PDF → JSON (skills/projects/education) | `parseResume()` via pdf.js (client-side) |
+| Weighted Fit Score: Hard 40% / Experience 30% / Soft 30% | `scoreVacancy()` |
+| Explainability: matches / gaps / suggestions | `buildExplain()` + card UI |
+| Web app: upload, query, vacancies, Fit Score | `index.html` |
+| OpenAI: AI resume parsing + Fit Score reasoning | `server.js` → `/api/ai/*` |
+
+## Connecting the **real** hh.kz API
+
+hh.kz sits behind **DDoS-Guard**, which blocks datacenter/sandbox IPs (you'll see HTTP 403,
+`Server: ddos-guard`). The app handles this with a 3-tier fetch and degrades gracefully:
+
+1. **Backend proxy** `/api/vacancies` — server-to-server with a registered `User-Agent`.
+2. **Direct client call** — from a real browser on a residential IP this passes DDoS-Guard
+   (CORS is open: `Access-Control-Allow-Origin: *`), so **live data works when you open the
+   page in your own Chrome**.
+3. **Curated fallback** — 14 KZ roles, so the demo always shows 10 ranked matches.
+
+To make tier 1 fully live in production:
+
+1. Register an application at **https://dev.hh.ru/admin**.
+2. Put your contact in `HH_USER_AGENT` and your OAuth token in `HH_ACCESS_TOKEN` (`.env`).
+   An authenticated, whitelisted app is not throttled/blocked.
+3. Deploy the backend on an IP with good reputation (or proxy via a residential/whitelisted egress).
+
+The source badge in the UI shows which tier served the results
+(`hh.kz · backend`, `hh.kz · direct`, or `curated demo set`).
+
+## OpenAI integration
+
+Set `OPENAI_API_KEY` in `.env` and the backend uses OpenAI; leave it empty and the app
+transparently falls back to the local heuristic parser/scorer (so it always runs).
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/ai/status` | GET | `{ enabled, model }` — frontend auto-detects on load |
+| `/api/ai/parse-resume` | POST `{text}` | LLM resume → `{skills, soft, projects, education, domains, years}` |
+| `/api/ai/tailor` | POST `{resume, vacancy}` | `{matches, gaps, suggestions, summary}` for a role |
+
+Flow when enabled:
+1. PDF text is extracted client-side (pdf.js), then sent to `/api/ai/parse-resume` for richer parsing.
+2. The 10-card grid uses the fast local 40/30/30 score (stays well under the spec's 5s budget).
+3. The focused **AI Resume Patch** calls `/api/ai/tailor` for an LLM-written summary — a "✦ OpenAI" badge appears.
+
+Model is configurable via `OPENAI_MODEL` (default `gpt-4o-mini`). Verified: with a key set the
+backend reaches `api.openai.com` and returns parsed JSON; without one it returns a clean
+`disabled` signal and the UI uses heuristics.
+
+## Files
+
+- `index.html` — frontend (UI, resume parsing, scoring, explainability)
+- `server.js` — Node backend (static serving + hh.kz proxy)
+- `.env` / `.env.example` — configuration
+- `package.json` — `npm start`
+
+## Next (spec Этап 2/3)
+
+PostgreSQL (Supabase) caching of vacancies, user auth, and a RAG layer for embedding-based
+semantic search. The `Resume Parser` and `Fit Score Engine` are already isolated functions, and
+OpenAI is wired in — moving the full scorer server-side behind RAG is the remaining step.
