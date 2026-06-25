@@ -21,6 +21,29 @@ node server.js              # → http://localhost:4173   (Node 18+)
 
 No `npm install` required — the backend uses only Node built-ins.
 
+## Deploy (Vercel)
+
+The repo is Vercel-ready: the frontend (`index.html`) is served static and the backend
+runs as **serverless functions** under `api/` (`server.js` is only for local dev).
+
+```bash
+vercel --prod        # from the repo root (or import the GitHub repo in the dashboard)
+```
+
+Optional environment variables (Project → Settings → Environment Variables):
+
+| Var | Default | Purpose |
+|---|---|---|
+| `HH_USER_AGENT` | `IzdeMe-JobAgent/1.0 (…)` | required by the hh.ru API |
+| `HH_AREA` / `HH_HOST` | `40` / `hh.kz` | Kazakhstan region/site |
+| `HH_ACCESS_TOKEN` | — | hh.ru OAuth token (avoids throttling) |
+| `OPENAI_API_KEY` | — | enables AI parsing + tailoring |
+| `OPENAI_MODEL` | `gpt-4o-mini` | OpenAI model |
+
+> Note: serverless functions run on Vercel's datacenter IPs, which hh.kz's DDoS-Guard
+> blocks, so `/api/vacancies` falls through to the client-side direct call (works from the
+> visitor's own browser) and then the curated dataset. The OpenAI functions work normally.
+
 ## Spec coverage
 
 | Spec requirement | Where |
