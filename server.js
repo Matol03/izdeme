@@ -36,11 +36,16 @@ const HH_AREA = process.env.HH_AREA || "40";    // 40 = Kazakhstan (hh.kz)
 const HH_HOST = process.env.HH_HOST || "hh.kz";
 const HH_TOKEN = process.env.HH_ACCESS_TOKEN || ""; // optional OAuth token (whitelists you past throttling)
 
-// OpenAI (spec: AI resume parsing + Fit Score reasoning). Optional — the app
+// LLM (spec: AI resume parsing + Fit Score reasoning). Any OpenAI-compatible
+// endpoint; defaults to Groq's free tier (no credit card). Optional — the app
 // falls back to local heuristics when no key is present.
-const OPENAI_KEY = process.env.OPENAI_API_KEY || "";
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
-const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+let LLM_API_KEY    = process.env.LLM_API_KEY || process.env.GROQ_API_KEY || "";
+const LLM_BASE_URL = (process.env.LLM_BASE_URL || "https://api.groq.com/openai/v1").replace(/\/+$/, "");
+const LLM_MODEL    = process.env.LLM_MODEL || "llama-3.3-70b-versatile";
+if (!LLM_API_KEY && /openai\.com/.test(LLM_BASE_URL)) LLM_API_KEY = process.env.OPENAI_API_KEY || "";
+const LLM_PROVIDER = /groq\.com/.test(LLM_BASE_URL) ? "Groq"
+  : /openai\.com/.test(LLM_BASE_URL) ? "OpenAI"
+  : /googleapis\.com/.test(LLM_BASE_URL) ? "Gemini" : "LLM";
 
 const MIME = { ".html":"text/html; charset=utf-8", ".js":"text/javascript", ".css":"text/css",
   ".svg":"image/svg+xml", ".json":"application/json", ".ico":"image/x-icon", ".png":"image/png" };
@@ -89,7 +94,7 @@ async function fetchVacancies(query, { page = 0, perPage = 30 } = {}) {
   return { found: data.found, items };
 }
 
-/* ---------- OpenAI helpers ---------- */
+/* ---------- LLM helpers (OpenAI-compatible) ---------- */
 function readJson(req) {
   return new Promise((resolve, reject) => {
     let b = "";
@@ -99,26 +104,26 @@ function readJson(req) {
   });
 }
 
-async function callOpenAI(messages, { json = true, maxTokens = 700, temperature = 0.3 } = {}) {
-  if (!OPENAI_KEY) { const e = new Error("OPENAI_API_KEY not set"); e.code = "NO_KEY"; throw e; }
-  const body = { model: OPENAI_MODEL, messages, temperature, max_tokens: maxTokens };
+async function callLLM(messages, { json = true, maxTokens = 700, temperature = 0.3 } = {}) {
+  if (!LLM_API_KEY) { const e = new Error("LLM_API_KEY not set"); e.code = "NO_KEY"; throw e; }
+  const body = { model: LLM_MODEL, messages, temperature, max_tokens: maxTokens };
   if (json) body.response_format = { type: "json_object" };
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 25000);
-  const r = await fetch(OPENAI_URL, {
+  const r = await fetch(LLM_BASE_URL + "/chat/completions", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + OPENAI_KEY },
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + LLM_API_KEY },
     body: JSON.stringify(body),
     signal: ctrl.signal,
   }).finally(() => clearTimeout(t));
-  if (!r.ok) { const txt = await r.text(); const e = new Error(`OpenAI ${r.status}: ${txt.slice(0, 240)}`); e.status = r.status; throw e; }
+  if (!r.ok) { const txt = await r.text(); const e = new Error(`${LLM_PROVIDER} ${r.status}: ${txt.slice(0, 240)}`); e.status = r.status; throw e; }
   const data = await r.json();
   return data.choices?.[0]?.message?.content || "{}";
 }
 
 // Extract a resume PDF's text → structured JSON (spec 2.2)
 async function aiParseResume(text) {
-  const content = await callOpenAI([
+  const content = await callLLM([
     { role: "system", content:
       "You are an expert resume parser. Extract ONLY information explicitly present in the resume. " +
       "Never invent, assume, or infer skills, employers, or dates that are not stated. Reply with strict JSON only." },
@@ -149,7 +154,7 @@ ${String(text).slice(0, 9000)}
 
 // Resume + vacancy → tailored summary + explainability (spec 2.3 / 2.4)
 async function aiTailor(resume, vacancy) {
-  const content = await callOpenAI([
+  const content = await callLLM([
     { role: "system", content: "You are a precise career assistant. Reply with JSON only. Never invent skills the candidate does not have." },
     { role: "user", content:
       "Given a candidate resume profile and a job vacancy, return JSON with keys: " +
@@ -196,9 +201,9 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // --- API: is OpenAI configured? ---
+  // --- API: is the LLM configured? ---
   if (u.pathname === "/api/ai/status") {
-    return send(res, 200, { enabled: !!OPENAI_KEY, model: OPENAI_MODEL });
+    return send(res, 200, { enabled: !!LLM_API_KEY, model: LLM_MODEL, provider: LLM_PROVIDER });
   }
 
   // --- API: AI resume parsing (PDF text → JSON) ---
@@ -207,7 +212,7 @@ const server = http.createServer(async (req, res) => {
       const { text } = await readJson(req);
       if (!text || String(text).length < 20) return send(res, 400, { error: "missing resume text" });
       const resume = await aiParseResume(text);
-      return send(res, 200, { source: "openai", model: OPENAI_MODEL, resume });
+      return send(res, 200, { source: LLM_PROVIDER, model: LLM_MODEL, resume });
     } catch (e) {
       return send(res, e.code === "NO_KEY" ? 503 : 502, { error: e.message, disabled: e.code === "NO_KEY" });
     }
@@ -219,7 +224,7 @@ const server = http.createServer(async (req, res) => {
       const { resume, vacancy } = await readJson(req);
       if (!resume || !vacancy) return send(res, 400, { error: "resume and vacancy required" });
       const out = await aiTailor(resume, vacancy);
-      return send(res, 200, { source: "openai", model: OPENAI_MODEL, ...out });
+      return send(res, 200, { source: LLM_PROVIDER, model: LLM_MODEL, ...out });
     } catch (e) {
       return send(res, e.code === "NO_KEY" ? 503 : 502, { error: e.message, disabled: e.code === "NO_KEY" });
     }
@@ -242,5 +247,5 @@ server.listen(PORT, () => {
   console.log(`  hh.kz proxy     →  /api/vacancies?text=...  (area=${HH_AREA}, host=${HH_HOST})`);
   console.log(`  User-Agent      →  ${HH_USER_AGENT}`);
   console.log(`  OAuth token     →  ${HH_TOKEN ? "set ✓" : "not set (optional)"}`);
-  console.log(`  OpenAI          →  ${OPENAI_KEY ? `enabled ✓ (${OPENAI_MODEL})` : "not set → local heuristic fallback"}\n`);
+  console.log(`  LLM (${LLM_PROVIDER})       →  ${LLM_API_KEY ? `enabled ✓ (${LLM_MODEL})` : "no key → local heuristic fallback"}\n`);
 });

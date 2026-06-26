@@ -639,7 +639,7 @@ function fmtSalary(s){
 
 /* ---------- state ---------- */
 let RESUME=null, CURRENT={vacancies:[],source:null,query:""};
-let AI_ENABLED=false, AI_MODEL="";
+let AI_ENABLED=false, AI_MODEL="", AI_PROVIDER="AI";
 
 /* ---------- OpenAI-backed enhancers (fall back to local heuristics) ---------- */
 async function aiParseResume(text){
@@ -725,7 +725,7 @@ function renderProfile(){
   if(RESUME.certifications&&RESUME.certifications.length)
     extra+=`<div class="pg-block"><div class="lbl">Certifications</div><div class="vals"><span class="v">${RESUME.certifications.map(c=>esc(c)).join(" · ")}</span></div></div>`;
 
-  const tag=RESUME._ai?`<span style="color:var(--accent)">OpenAI</span>`:"local parser";
+  const tag=RESUME._ai?`<span style="color:var(--accent)">${AI_PROVIDER}</span>`:"local parser";
   p.innerHTML=`
     <div class="profile-head">
       <div class="l">
@@ -756,8 +756,8 @@ async function onFile(file){
     const text=await extractPdfText(file);
     RESUME=parseResume(text);          // local baseline (instant)
     renderProfile();
-    if(AI_ENABLED){                    // enrich with OpenAI if configured
-      dz.querySelector(".dz-txt b").textContent="Enhancing with OpenAI…";
+    if(AI_ENABLED){                    // enrich with the configured LLM
+      dz.querySelector(".dz-txt b").textContent="Enhancing with "+AI_PROVIDER+"…";
       const ai=await aiParseResume(text);
       if(ai){ RESUME={...RESUME,...ai}; renderProfile(); }
     }
@@ -846,7 +846,7 @@ function renderResume(idx){
   <div class="patch">
     <div class="patch-head">
       <div class="patch-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></div>
-      <div style="flex:1"><h3>AI Resume Patch <span id="aiPill" style="display:none;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--accent);border:1px solid rgba(167,139,250,.35);background:rgba(124,92,255,.12);padding:3px 9px;border-radius:999px;vertical-align:middle;margin-left:6px">✦ OpenAI ${AI_MODEL}</span></h3><p>Tailored summary for <b>${item.name}</b> @ ${item.company} · ${a.score}% fit</p></div>
+      <div style="flex:1"><h3>AI Resume Patch <span id="aiPill" style="display:none;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--accent);border:1px solid rgba(167,139,250,.35);background:rgba(124,92,255,.12);padding:3px 9px;border-radius:999px;vertical-align:middle;margin-left:6px">✦ ${AI_PROVIDER} ${AI_MODEL}</span></h3><p>Tailored summary for <b>${item.name}</b> @ ${item.company} · ${a.score}% fit</p></div>
     </div>
     <div class="patch-body">
       <div class="resume-text" id="resumeText">${txt}</div>
@@ -925,13 +925,13 @@ function resetApp(){document.getElementById("results").classList.remove("show");
 (function init(){
   document.getElementById("chips").innerHTML=EXAMPLE_PROMPTS.map(p=>`<span class="chip" onclick="useChip(this)">${p}</span>`).join("");
   document.getElementById("prompt").addEventListener("keydown",e=>{if(e.key==="Enter")runMatch();});
-  // detect OpenAI backend
+  // detect AI backend (provider-agnostic: Groq / OpenAI / Gemini / …)
   fetch("/api/ai/status").then(r=>r.json()).then(j=>{
-    AI_ENABLED=!!j.enabled; AI_MODEL=j.model||"";
+    AI_ENABLED=!!j.enabled; AI_MODEL=j.model||""; AI_PROVIDER=j.provider||"AI";
     if(AI_ENABLED){
-      document.querySelector(".badge").innerHTML='<span class="dot"></span> Semantic search · hh.kz · OpenAI '+AI_MODEL;
+      document.querySelector(".badge").innerHTML='<span class="dot"></span> Semantic search · hh.kz · '+AI_PROVIDER+' '+AI_MODEL;
       const sub=document.querySelector("#dropzone .dz-txt span");
-      if(sub) sub.textContent="PDF — parsed by OpenAI into skills, projects & education for an accurate Fit Score";
+      if(sub) sub.textContent="PDF — parsed by "+AI_PROVIDER+" into skills, projects & education for an accurate Fit Score";
     }
   }).catch(()=>{});
   const dz=document.getElementById("dropzone");

@@ -10,9 +10,16 @@ const HH_USER_AGENT = process.env.HH_USER_AGENT || "IzdeMe-JobAgent/1.0 (murat.a
 const HH_AREA = process.env.HH_AREA || "40";   // 40 = Kazakhstan (hh.kz)
 const HH_HOST = process.env.HH_HOST || "hh.kz";
 const HH_TOKEN = process.env.HH_ACCESS_TOKEN || "";
-const OPENAI_KEY = process.env.OPENAI_API_KEY || "";
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
-const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+// LLM provider — any OpenAI-compatible endpoint. Defaults to Groq, which has a
+// free tier (no credit card). Override LLM_BASE_URL/LLM_MODEL for OpenAI, Gemini, etc.
+let LLM_API_KEY    = process.env.LLM_API_KEY || process.env.GROQ_API_KEY || "";
+const LLM_BASE_URL = (process.env.LLM_BASE_URL || "https://api.groq.com/openai/v1").replace(/\/+$/, "");
+const LLM_MODEL    = process.env.LLM_MODEL || "llama-3.3-70b-versatile";
+// only fall back to an OpenAI key when the base URL is actually OpenAI
+if (!LLM_API_KEY && /openai\.com/.test(LLM_BASE_URL)) LLM_API_KEY = process.env.OPENAI_API_KEY || "";
+const LLM_PROVIDER = /groq\.com/.test(LLM_BASE_URL) ? "Groq"
+  : /openai\.com/.test(LLM_BASE_URL) ? "OpenAI"
+  : /googleapis\.com/.test(LLM_BASE_URL) ? "Gemini" : "LLM";
 
 const clean = s => (s || "").replace(/<\/?highlighttext>/g, "");
 
@@ -63,26 +70,26 @@ async function fetchVacancies(query, { page = 0, perPage = 30 } = {}) {
   return { found: data.found, items };
 }
 
-/* ---------- OpenAI helpers ---------- */
-async function callOpenAI(messages, { json = true, maxTokens = 700, temperature = 0.3 } = {}) {
-  if (!OPENAI_KEY) { const e = new Error("OPENAI_API_KEY not set"); e.code = "NO_KEY"; throw e; }
-  const reqBody = { model: OPENAI_MODEL, messages, temperature, max_tokens: maxTokens };
+/* ---------- LLM helpers (OpenAI-compatible: Groq / OpenAI / Gemini / …) ---------- */
+async function callLLM(messages, { json = true, maxTokens = 700, temperature = 0.3 } = {}) {
+  if (!LLM_API_KEY) { const e = new Error("LLM_API_KEY not set"); e.code = "NO_KEY"; throw e; }
+  const reqBody = { model: LLM_MODEL, messages, temperature, max_tokens: maxTokens };
   if (json) reqBody.response_format = { type: "json_object" };
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 22000);
-  const r = await fetch(OPENAI_URL, {
+  const r = await fetch(LLM_BASE_URL + "/chat/completions", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + OPENAI_KEY },
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + LLM_API_KEY },
     body: JSON.stringify(reqBody),
     signal: ctrl.signal,
   }).finally(() => clearTimeout(t));
-  if (!r.ok) { const txt = await r.text(); const e = new Error(`OpenAI ${r.status}: ${txt.slice(0, 240)}`); e.status = r.status; throw e; }
+  if (!r.ok) { const txt = await r.text(); const e = new Error(`${LLM_PROVIDER} ${r.status}: ${txt.slice(0, 240)}`); e.status = r.status; throw e; }
   const data = await r.json();
   return data.choices?.[0]?.message?.content || "{}";
 }
 
 async function aiParseResume(text) {
-  const content = await callOpenAI([
+  const content = await callLLM([
     { role: "system", content:
       "You are an expert resume parser. Extract ONLY information explicitly present in the resume. " +
       "Never invent, assume, or infer skills, employers, or dates that are not stated. Reply with strict JSON only." },
@@ -112,7 +119,7 @@ ${String(text).slice(0, 9000)}
 }
 
 async function aiTailor(resume, vacancy) {
-  const content = await callOpenAI([
+  const content = await callLLM([
     { role: "system", content: "You are a precise career assistant. Reply with JSON only. Never invent skills the candidate does not have." },
     { role: "user", content:
       "Given a candidate resume profile and a job vacancy, return JSON with keys: " +
@@ -127,6 +134,7 @@ async function aiTailor(resume, vacancy) {
 }
 
 module.exports = {
-  HH_USER_AGENT, HH_AREA, HH_HOST, HH_TOKEN, OPENAI_KEY, OPENAI_MODEL,
-  body, fetchVacancies, callOpenAI, aiParseResume, aiTailor,
+  HH_USER_AGENT, HH_AREA, HH_HOST, HH_TOKEN,
+  LLM_API_KEY, LLM_MODEL, LLM_PROVIDER, LLM_BASE_URL,
+  body, fetchVacancies, callLLM, aiParseResume, aiTailor,
 };
