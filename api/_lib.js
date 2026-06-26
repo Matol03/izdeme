@@ -28,17 +28,20 @@ const PROVIDERS = {
     extra: { reasoning_effort: "none" },
   },
 };
-const DEFAULT_PROVIDER = (PROVIDERS[process.env.LLM_PROVIDER] && PROVIDERS[process.env.LLM_PROVIDER].apiKey) ? process.env.LLM_PROVIDER
-  : PROVIDERS.groq.apiKey ? "groq" : PROVIDERS.gemini.apiKey ? "gemini" : "groq";
+// Optionally LOCK to one provider: forces every call to it and hides the UI switch.
+const LOCK = (PROVIDERS[process.env.LLM_LOCK] && PROVIDERS[process.env.LLM_LOCK].apiKey) ? process.env.LLM_LOCK : "";
+const DEFAULT_PROVIDER = LOCK || ((PROVIDERS[process.env.LLM_PROVIDER] && PROVIDERS[process.env.LLM_PROVIDER].apiKey) ? process.env.LLM_PROVIDER
+  : PROVIDERS.groq.apiKey ? "groq" : PROVIDERS.gemini.apiKey ? "gemini" : "groq");
 
+function resolve(id) { return LOCK || ((PROVIDERS[id] && PROVIDERS[id].apiKey) ? id : DEFAULT_PROVIDER); }
 function providerOf(id) {
-  const k = (PROVIDERS[id] && PROVIDERS[id].apiKey) ? id : DEFAULT_PROVIDER;
-  const p = PROVIDERS[k];
-  return { id: k, label: p.label, model: p.model, enabled: !!p.apiKey };
+  const p = PROVIDERS[resolve(id)];
+  return { id: resolve(id), label: p.label, model: p.model, enabled: !!p.apiKey };
 }
 function providerStatus() {
   return {
     default: DEFAULT_PROVIDER,
+    locked: LOCK || null,
     providers: Object.entries(PROVIDERS).map(([id, p]) => ({ id, label: p.label, model: p.model, enabled: !!p.apiKey })),
   };
 }
@@ -94,8 +97,7 @@ async function fetchVacancies(query, { page = 0, perPage = 30 } = {}) {
 
 /* ---------- LLM helpers (OpenAI-compatible: Groq / OpenAI / Gemini / …) ---------- */
 async function callLLM(messages, { json = true, maxTokens = 700, temperature = 0.3, provider } = {}) {
-  const id = (PROVIDERS[provider] && PROVIDERS[provider].apiKey) ? provider : DEFAULT_PROVIDER;
-  const p = PROVIDERS[id];
+  const p = PROVIDERS[resolve(provider)];
   if (!p || !p.apiKey) { const e = new Error(`${(p && p.label) || id} API key not set`); e.code = "NO_KEY"; throw e; }
   const reqBody = { model: p.model, messages, temperature, max_tokens: maxTokens };
   if (json) reqBody.response_format = { type: "json_object" };

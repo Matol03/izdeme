@@ -649,7 +649,7 @@ function fmtSalary(s){
 /* ---------- state ---------- */
 let RESUME=null, CURRENT={vacancies:[],source:null,query:""};
 let AI_ENABLED=false, AI_MODEL="", AI_PROVIDER="AI";
-let SELECTED_PROVIDER="", PROVIDERS_LIST=[], LAST_RESUME_TEXT="";
+let SELECTED_PROVIDER="", PROVIDERS_LIST=[], LAST_RESUME_TEXT="", LOCKED="";
 
 /* ---------- LLM-backed enhancers (fall back to local heuristics) ---------- */
 async function aiParseResume(text){
@@ -708,7 +708,7 @@ async function aiTailorPatch(idx){
 function renderProviderSwitch(){
   const wrap=document.getElementById("aiSwitch"); if(!wrap) return;
   const enabled=PROVIDERS_LIST.filter(p=>p.enabled);
-  if(enabled.length<2){ wrap.style.display="none"; return; }   // nothing to switch between
+  if(LOCKED || enabled.length<2){ wrap.style.display="none"; return; }   // locked or nothing to switch between
   wrap.style.display="inline-flex";
   wrap.innerHTML='<span class="sw-label">AI model</span>'+enabled.map(p=>
     `<button class="sw-btn${p.id===SELECTED_PROVIDER?" active":""}" data-id="${p.id}" onclick="switchProvider('${p.id}')">${p.label}</button>`
@@ -973,8 +973,9 @@ function resetApp(){document.getElementById("results").classList.remove("show");
   fetch("/api/ai/status").then(r=>r.json()).then(j=>{
     AI_ENABLED=!!j.enabled;
     PROVIDERS_LIST=Array.isArray(j.providers)?j.providers:[];
+    LOCKED=j.locked||"";
     const enabled=PROVIDERS_LIST.filter(p=>p.enabled);
-    SELECTED_PROVIDER=(enabled.find(p=>p.id===j.default)||enabled[0]||{}).id||"";
+    SELECTED_PROVIDER=LOCKED||(enabled.find(p=>p.id===j.default)||enabled[0]||{}).id||"";
     if(AI_ENABLED){ updateAiLabels(); renderProviderSwitch(); }
   }).catch(()=>{});
   const dz=document.getElementById("dropzone");
