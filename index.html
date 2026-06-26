@@ -65,6 +65,13 @@
   .chip{padding:8px 14px;border:1px solid var(--stroke);border-radius:999px;background:var(--panel);color:var(--muted);font-size:13px;cursor:pointer;transition:.18s}
   .chip:hover{color:var(--txt);border-color:var(--stroke-strong);background:rgba(124,92,255,.1)}
 
+  /* model switch */
+  .ai-switch{display:none;align-items:center;gap:6px;justify-content:center;margin:18px auto 0;padding:5px;border:1px solid var(--stroke);border-radius:999px;background:var(--panel);width:max-content}
+  .ai-switch .sw-label{font-size:12px;color:var(--muted-2);padding:0 8px 0 6px}
+  .ai-switch .sw-btn{padding:7px 16px;border:none;border-radius:999px;background:transparent;color:var(--muted);font-family:'Sora';font-weight:600;font-size:13px;cursor:pointer;transition:.18s}
+  .ai-switch .sw-btn:hover{color:var(--txt)}
+  .ai-switch .sw-btn.active{background:linear-gradient(100deg,var(--brand),var(--brand-2));color:#fff;box-shadow:0 4px 14px -6px var(--brand)}
+
   /* resume panel */
   .resume-shell{max-width:760px;margin:18px auto 0}
   .dropzone{display:flex;align-items:center;gap:16px;padding:18px 20px;border:1.5px dashed var(--stroke-strong);border-radius:16px;background:var(--panel);transition:.2s;cursor:pointer}
@@ -238,6 +245,8 @@
       </div>
       <div class="chips" id="chips"></div>
     </div>
+
+    <div class="ai-switch" id="aiSwitch" style="display:none"></div>
 
     <div class="resume-shell">
       <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
@@ -640,12 +649,13 @@ function fmtSalary(s){
 /* ---------- state ---------- */
 let RESUME=null, CURRENT={vacancies:[],source:null,query:""};
 let AI_ENABLED=false, AI_MODEL="", AI_PROVIDER="AI";
+let SELECTED_PROVIDER="", PROVIDERS_LIST=[], LAST_RESUME_TEXT="";
 
-/* ---------- OpenAI-backed enhancers (fall back to local heuristics) ---------- */
+/* ---------- LLM-backed enhancers (fall back to local heuristics) ---------- */
 async function aiParseResume(text){
   if(!AI_ENABLED) return null;
   try{
-    const r=await fetch("/api/ai/parse-resume",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text})});
+    const r=await fetch("/api/ai/parse-resume",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text,provider:SELECTED_PROVIDER})});
     if(!r.ok) return null;
     const j=await r.json(); const R=j.resume; if(!R) return null;
     const low=a=>(Array.isArray(a)?a:[]).map(s=>String(s).toLowerCase());
@@ -684,7 +694,7 @@ async function aiTailorPatch(idx){
   const item=CURRENT.vacancies[idx];
   try{
     const r=await fetch("/api/ai/tailor",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({resume:{skills:RESUME.skills,soft:RESUME.soft,domains:RESUME.domains,projects:RESUME.projects,years:RESUME.years,education:RESUME.education},vacancy:item})});
+      body:JSON.stringify({resume:{skills:RESUME.skills,soft:RESUME.soft,domains:RESUME.domains,projects:RESUME.projects,years:RESUME.years,education:RESUME.education},vacancy:item,provider:SELECTED_PROVIDER})});
     if(!r.ok) return;
     const j=await r.json();
     if(CURRENT.vacancies[idx]!==item) return; // user moved on
@@ -692,6 +702,37 @@ async function aiTailorPatch(idx){
     if(el&&j.summary) el.innerHTML=markKeywords(j.summary,[...(RESUME.skills||[]),...(j.matches||[]),item.company]);
     const pill=document.getElementById("aiPill"); if(pill) pill.style.display="inline-flex";
   }catch(e){}
+}
+
+/* ---------- model switcher (Groq ⇄ Gemini) ---------- */
+function renderProviderSwitch(){
+  const wrap=document.getElementById("aiSwitch"); if(!wrap) return;
+  const enabled=PROVIDERS_LIST.filter(p=>p.enabled);
+  if(enabled.length<2){ wrap.style.display="none"; return; }   // nothing to switch between
+  wrap.style.display="inline-flex";
+  wrap.innerHTML='<span class="sw-label">AI model</span>'+enabled.map(p=>
+    `<button class="sw-btn${p.id===SELECTED_PROVIDER?" active":""}" data-id="${p.id}" onclick="switchProvider('${p.id}')">${p.label}</button>`
+  ).join("");
+}
+function updateAiLabels(){
+  const info=PROVIDERS_LIST.find(p=>p.id===SELECTED_PROVIDER);
+  AI_PROVIDER=info?info.label:"AI"; AI_MODEL=info?info.model:"";
+  const badge=document.querySelector(".badge");
+  if(badge&&AI_ENABLED) badge.innerHTML='<span class="dot"></span> Semantic search · hh.kz · '+AI_PROVIDER+' '+AI_MODEL;
+  const sub=document.querySelector("#dropzone .dz-txt span");
+  if(sub&&AI_ENABLED) sub.textContent="PDF — parsed by "+AI_PROVIDER+" into skills, projects & education for an accurate Fit Score";
+  document.querySelectorAll("#aiSwitch .sw-btn").forEach(b=>b.classList.toggle("active",b.dataset.id===SELECTED_PROVIDER));
+}
+async function switchProvider(id){
+  if(id===SELECTED_PROVIDER) return;
+  SELECTED_PROVIDER=id; updateAiLabels();
+  // re-evaluate with the newly selected model so the difference is visible
+  if(AI_ENABLED && LAST_RESUME_TEXT){
+    RESUME=parseResume(LAST_RESUME_TEXT);
+    const ai=await aiParseResume(LAST_RESUME_TEXT); if(ai) RESUME={...RESUME,...ai};
+    renderProfile();
+  }
+  if(CURRENT.query && document.getElementById("results").classList.contains("show")) runMatch();
 }
 
 /* ---------- profile rendering ---------- */
@@ -754,6 +795,7 @@ async function onFile(file){
   dz.querySelector(".dz-txt b").textContent="Parsing "+file.name+"…";
   try{
     const text=await extractPdfText(file);
+    LAST_RESUME_TEXT=text;             // cache for re-parse on model switch
     RESUME=parseResume(text);          // local baseline (instant)
     renderProfile();
     if(AI_ENABLED){                    // enrich with the configured LLM
@@ -774,9 +816,11 @@ function loadSampleResume(){
   Soft skills: communication, teamwork, analytical, problem-solving.
   Projects: Built a climate data analysis pipeline in Python; developed a SQL dashboard for energy metrics;
   trained a scikit-learn model for forecasting. Domains: ecology, sustainability, data science. 2 years experience.`;
+  LAST_RESUME_TEXT=sample;            // cache for re-parse on model switch
   RESUME=parseResume(sample);
   renderProfile();
   if(!document.getElementById("prompt").value) document.getElementById("prompt").value="Python and ecology";
+  if(AI_ENABLED) aiParseResume(sample).then(ai=>{ if(ai){RESUME={...RESUME,...ai}; renderProfile();} });
   if(CURRENT.query||document.getElementById("results").classList.contains("show")) runMatch();
 }
 
@@ -925,14 +969,13 @@ function resetApp(){document.getElementById("results").classList.remove("show");
 (function init(){
   document.getElementById("chips").innerHTML=EXAMPLE_PROMPTS.map(p=>`<span class="chip" onclick="useChip(this)">${p}</span>`).join("");
   document.getElementById("prompt").addEventListener("keydown",e=>{if(e.key==="Enter")runMatch();});
-  // detect AI backend (provider-agnostic: Groq / OpenAI / Gemini / …)
+  // detect AI backend + available providers (Groq / Gemini / …)
   fetch("/api/ai/status").then(r=>r.json()).then(j=>{
-    AI_ENABLED=!!j.enabled; AI_MODEL=j.model||""; AI_PROVIDER=j.provider||"AI";
-    if(AI_ENABLED){
-      document.querySelector(".badge").innerHTML='<span class="dot"></span> Semantic search · hh.kz · '+AI_PROVIDER+' '+AI_MODEL;
-      const sub=document.querySelector("#dropzone .dz-txt span");
-      if(sub) sub.textContent="PDF — parsed by "+AI_PROVIDER+" into skills, projects & education for an accurate Fit Score";
-    }
+    AI_ENABLED=!!j.enabled;
+    PROVIDERS_LIST=Array.isArray(j.providers)?j.providers:[];
+    const enabled=PROVIDERS_LIST.filter(p=>p.enabled);
+    SELECTED_PROVIDER=(enabled.find(p=>p.id===j.default)||enabled[0]||{}).id||"";
+    if(AI_ENABLED){ updateAiLabels(); renderProviderSwitch(); }
   }).catch(()=>{});
   const dz=document.getElementById("dropzone");
   ["dragover","dragenter"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add("drag");}));

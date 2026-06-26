@@ -77,18 +77,26 @@ To make tier 1 fully live in production:
 The source badge in the UI shows which tier served the results
 (`hh.kz · backend`, `hh.kz · direct`, or `curated demo set`).
 
-## AI integration (free, provider-agnostic)
+## AI integration — switchable models (free)
 
-The LLM endpoints call any **OpenAI-compatible** API. The default is **Groq**, which has a
-free tier (no credit card) — get a key at https://console.groq.com/keys and set `LLM_API_KEY`.
-Leave it empty and the app transparently falls back to the local heuristic parser/scorer
-(so it always runs).
+The LLM endpoints call any **OpenAI-compatible** API. Two providers ship configured, both with
+free tiers (no credit card) — set either or both:
+
+| Provider | Free key | Env vars | Default model |
+|---|---|---|---|
+| **Groq** | https://console.groq.com/keys | `GROQ_API_KEY` (+ `GROQ_MODEL`) | `llama-3.3-70b-versatile` |
+| **Gemini** | https://aistudio.google.com/apikey | `GEMINI_API_KEY` (+ `GEMINI_MODEL`) | `gemini-2.5-flash` |
+
+When **both** keys are set, an **AI-model switch (Groq ⇄ Gemini)** appears in the UI; flipping it
+re-parses the resume and re-tailors with the chosen model so you can compare. `LLM_PROVIDER` picks
+the default. With no key set, the app falls back to the local heuristic parser/scorer (always runs).
+(Gemini 2.5 "thinking" is disabled via `reasoning_effort:"none"` so JSON output isn't truncated.)
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `/api/ai/status` | GET | `{ enabled, model, provider }` — frontend auto-detects on load |
-| `/api/ai/parse-resume` | POST `{text}` | LLM resume → `{skills, soft, projects, education, domains, years}` |
-| `/api/ai/tailor` | POST `{resume, vacancy}` | `{matches, gaps, suggestions, summary}` for a role |
+| `/api/ai/status` | GET | `{ enabled, default, providers:[{id,label,model,enabled}] }` |
+| `/api/ai/parse-resume` | POST `{text, provider}` | LLM resume → `{skills, soft, projects, education, domains, years}` |
+| `/api/ai/tailor` | POST `{resume, vacancy, provider}` | `{matches, gaps, suggestions, summary}` for a role |
 
 Flow when enabled:
 1. PDF text is extracted client-side (pdf.js), then sent to `/api/ai/parse-resume` for richer parsing.

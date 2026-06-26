@@ -36,16 +36,37 @@ const HH_AREA = process.env.HH_AREA || "40";    // 40 = Kazakhstan (hh.kz)
 const HH_HOST = process.env.HH_HOST || "hh.kz";
 const HH_TOKEN = process.env.HH_ACCESS_TOKEN || ""; // optional OAuth token (whitelists you past throttling)
 
-// LLM (spec: AI resume parsing + Fit Score reasoning). Any OpenAI-compatible
-// endpoint; defaults to Groq's free tier (no credit card). Optional — the app
-// falls back to local heuristics when no key is present.
-let LLM_API_KEY    = process.env.LLM_API_KEY || process.env.GROQ_API_KEY || "";
-const LLM_BASE_URL = (process.env.LLM_BASE_URL || "https://api.groq.com/openai/v1").replace(/\/+$/, "");
-const LLM_MODEL    = process.env.LLM_MODEL || "llama-3.3-70b-versatile";
-if (!LLM_API_KEY && /openai\.com/.test(LLM_BASE_URL)) LLM_API_KEY = process.env.OPENAI_API_KEY || "";
-const LLM_PROVIDER = /groq\.com/.test(LLM_BASE_URL) ? "Groq"
-  : /openai\.com/.test(LLM_BASE_URL) ? "OpenAI"
-  : /googleapis\.com/.test(LLM_BASE_URL) ? "Gemini" : "LLM";
+// LLM providers — all OpenAI-compatible. Frontend can switch between any with a key.
+// Both Groq and Gemini have free tiers (no credit card).
+const PROVIDERS = {
+  groq: {
+    label: "Groq",
+    baseUrl: (process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1").replace(/\/+$/, ""),
+    apiKey: process.env.GROQ_API_KEY || process.env.LLM_API_KEY || "",
+    model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
+  },
+  gemini: {
+    label: "Gemini",
+    baseUrl: (process.env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai").replace(/\/+$/, ""),
+    apiKey: process.env.GEMINI_API_KEY || "",
+    model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+    // 2.5 models "think" by default and can exhaust the token budget mid-JSON; turn it off
+    extra: { reasoning_effort: "none" },
+  },
+};
+const DEFAULT_PROVIDER = (PROVIDERS[process.env.LLM_PROVIDER] && PROVIDERS[process.env.LLM_PROVIDER].apiKey) ? process.env.LLM_PROVIDER
+  : PROVIDERS.groq.apiKey ? "groq" : PROVIDERS.gemini.apiKey ? "gemini" : "groq";
+function providerOf(id) {
+  const k = (PROVIDERS[id] && PROVIDERS[id].apiKey) ? id : DEFAULT_PROVIDER;
+  const p = PROVIDERS[k];
+  return { id: k, label: p.label, model: p.model, enabled: !!p.apiKey };
+}
+function providerStatus() {
+  return {
+    default: DEFAULT_PROVIDER,
+    providers: Object.entries(PROVIDERS).map(([id, p]) => ({ id, label: p.label, model: p.model, enabled: !!p.apiKey })),
+  };
+}
 
 const MIME = { ".html":"text/html; charset=utf-8", ".js":"text/javascript", ".css":"text/css",
   ".svg":"image/svg+xml", ".json":"application/json", ".ico":"image/x-icon", ".png":"image/png" };
@@ -104,25 +125,28 @@ function readJson(req) {
   });
 }
 
-async function callLLM(messages, { json = true, maxTokens = 700, temperature = 0.3 } = {}) {
-  if (!LLM_API_KEY) { const e = new Error("LLM_API_KEY not set"); e.code = "NO_KEY"; throw e; }
-  const body = { model: LLM_MODEL, messages, temperature, max_tokens: maxTokens };
+async function callLLM(messages, { json = true, maxTokens = 700, temperature = 0.3, provider } = {}) {
+  const id = (PROVIDERS[provider] && PROVIDERS[provider].apiKey) ? provider : DEFAULT_PROVIDER;
+  const p = PROVIDERS[id];
+  if (!p || !p.apiKey) { const e = new Error(`${(p && p.label) || id} API key not set`); e.code = "NO_KEY"; throw e; }
+  const body = { model: p.model, messages, temperature, max_tokens: maxTokens };
   if (json) body.response_format = { type: "json_object" };
+  if (p.extra) Object.assign(body, p.extra);   // provider-specific tuning (e.g. Gemini thinking off)
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 25000);
-  const r = await fetch(LLM_BASE_URL + "/chat/completions", {
+  const r = await fetch(p.baseUrl + "/chat/completions", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + LLM_API_KEY },
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + p.apiKey },
     body: JSON.stringify(body),
     signal: ctrl.signal,
   }).finally(() => clearTimeout(t));
-  if (!r.ok) { const txt = await r.text(); const e = new Error(`${LLM_PROVIDER} ${r.status}: ${txt.slice(0, 240)}`); e.status = r.status; throw e; }
+  if (!r.ok) { const txt = await r.text(); const e = new Error(`${p.label} ${r.status}: ${txt.slice(0, 240)}`); e.status = r.status; throw e; }
   const data = await r.json();
   return data.choices?.[0]?.message?.content || "{}";
 }
 
 // Extract a resume PDF's text → structured JSON (spec 2.2)
-async function aiParseResume(text) {
+async function aiParseResume(text, provider) {
   const content = await callLLM([
     { role: "system", content:
       "You are an expert resume parser. Extract ONLY information explicitly present in the resume. " +
@@ -148,12 +172,12 @@ Resume text:
 """
 ${String(text).slice(0, 9000)}
 """` },
-  ], { maxTokens: 1200, temperature: 0 });
+  ], { maxTokens: 1200, temperature: 0, provider });
   return JSON.parse(content);
 }
 
 // Resume + vacancy → tailored summary + explainability (spec 2.3 / 2.4)
-async function aiTailor(resume, vacancy) {
+async function aiTailor(resume, vacancy, provider) {
   const content = await callLLM([
     { role: "system", content: "You are a precise career assistant. Reply with JSON only. Never invent skills the candidate does not have." },
     { role: "user", content:
@@ -164,7 +188,7 @@ async function aiTailor(resume, vacancy) {
       "summary (a 2-3 sentence tailored resume summary for THIS role, weaving in the candidate's real skills and the job's keywords).\n\n" +
       "Resume: " + JSON.stringify(resume).slice(0, 2500) + "\n\nVacancy: " +
       JSON.stringify({ name: vacancy.name, company: vacancy.company, requirements: vacancy.requirements, responsibilities: vacancy.responsibilities }).slice(0, 2500) },
-  ], { maxTokens: 500 });
+  ], { maxTokens: 500, provider });
   return JSON.parse(content);
 }
 
@@ -201,18 +225,20 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // --- API: is the LLM configured? ---
+  // --- API: which LLM providers are configured? ---
   if (u.pathname === "/api/ai/status") {
-    return send(res, 200, { enabled: !!LLM_API_KEY, model: LLM_MODEL, provider: LLM_PROVIDER });
+    const s = providerStatus();
+    return send(res, 200, { enabled: s.providers.some(p => p.enabled), ...s });
   }
 
   // --- API: AI resume parsing (PDF text → JSON) ---
   if (u.pathname === "/api/ai/parse-resume" && req.method === "POST") {
     try {
-      const { text } = await readJson(req);
+      const { text, provider } = await readJson(req);
       if (!text || String(text).length < 20) return send(res, 400, { error: "missing resume text" });
-      const resume = await aiParseResume(text);
-      return send(res, 200, { source: LLM_PROVIDER, model: LLM_MODEL, resume });
+      const resume = await aiParseResume(text, provider);
+      const p = providerOf(provider);
+      return send(res, 200, { source: p.label, provider: p.id, model: p.model, resume });
     } catch (e) {
       return send(res, e.code === "NO_KEY" ? 503 : 502, { error: e.message, disabled: e.code === "NO_KEY" });
     }
@@ -221,10 +247,11 @@ const server = http.createServer(async (req, res) => {
   // --- API: AI tailored summary + matches/gaps/suggestions ---
   if (u.pathname === "/api/ai/tailor" && req.method === "POST") {
     try {
-      const { resume, vacancy } = await readJson(req);
+      const { resume, vacancy, provider } = await readJson(req);
       if (!resume || !vacancy) return send(res, 400, { error: "resume and vacancy required" });
-      const out = await aiTailor(resume, vacancy);
-      return send(res, 200, { source: LLM_PROVIDER, model: LLM_MODEL, ...out });
+      const out = await aiTailor(resume, vacancy, provider);
+      const p = providerOf(provider);
+      return send(res, 200, { source: p.label, provider: p.id, model: p.model, ...out });
     } catch (e) {
       return send(res, e.code === "NO_KEY" ? 503 : 502, { error: e.message, disabled: e.code === "NO_KEY" });
     }
@@ -247,5 +274,8 @@ server.listen(PORT, () => {
   console.log(`  hh.kz proxy     →  /api/vacancies?text=...  (area=${HH_AREA}, host=${HH_HOST})`);
   console.log(`  User-Agent      →  ${HH_USER_AGENT}`);
   console.log(`  OAuth token     →  ${HH_TOKEN ? "set ✓" : "not set (optional)"}`);
-  console.log(`  LLM (${LLM_PROVIDER})       →  ${LLM_API_KEY ? `enabled ✓ (${LLM_MODEL})` : "no key → local heuristic fallback"}\n`);
+  const ps = providerStatus();
+  console.log(`  LLM providers   →  ${ps.providers.map(p => `${p.label}${p.enabled ? " ✓" : " ✗"}`).join("  ")}  (default: ${ps.default})`);
+  if (!ps.providers.some(p => p.enabled)) console.log(`                     no key → local heuristic fallback`);
+  console.log("");
 });
