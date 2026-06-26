@@ -15,7 +15,7 @@ Frontend (index.html)  ──▶  Backend API (server.js)  ──▶  Job Fetche
 ```bash
 git clone https://github.com/Matol03/izdeme.git
 cd izdeme
-cp .env.example .env        # adjust if needed (add OPENAI_API_KEY to enable AI)
+cp .env.example .env        # adjust if needed (add a free LLM_API_KEY to enable AI)
 node server.js              # → http://localhost:4173   (Node 18+)
 ```
 
@@ -37,12 +37,13 @@ Optional environment variables (Project → Settings → Environment Variables):
 | `HH_USER_AGENT` | `IzdeMe-JobAgent/1.0 (…)` | required by the hh.ru API |
 | `HH_AREA` / `HH_HOST` | `40` / `hh.kz` | Kazakhstan region/site |
 | `HH_ACCESS_TOKEN` | — | hh.ru OAuth token (avoids throttling) |
-| `OPENAI_API_KEY` | — | enables AI parsing + tailoring |
-| `OPENAI_MODEL` | `gpt-4o-mini` | OpenAI model |
+| `LLM_API_KEY` | — | enables AI parsing + tailoring (free Groq key: https://console.groq.com/keys) |
+| `LLM_BASE_URL` | `https://api.groq.com/openai/v1` | any OpenAI-compatible endpoint |
+| `LLM_MODEL` | `llama-3.3-70b-versatile` | model name for the chosen provider |
 
 > Note: serverless functions run on Vercel's datacenter IPs, which hh.kz's DDoS-Guard
 > blocks, so `/api/vacancies` falls through to the client-side direct call (works from the
-> visitor's own browser) and then the curated dataset. The OpenAI functions work normally.
+> visitor's own browser) and then the curated dataset. The LLM functions work normally.
 
 ## Spec coverage
 
@@ -53,7 +54,7 @@ Optional environment variables (Project → Settings → Environment Variables):
 | Weighted Fit Score: Hard 40% / Experience 30% / Soft 30% | `scoreVacancy()` |
 | Explainability: matches / gaps / suggestions | `buildExplain()` + card UI |
 | Web app: upload, query, vacancies, Fit Score | `index.html` |
-| OpenAI: AI resume parsing + Fit Score reasoning | `server.js` → `/api/ai/*` |
+| LLM (Groq/OpenAI/Gemini): AI resume parsing + Fit Score reasoning | `server.js` → `/api/ai/*` |
 
 ## Connecting the **real** hh.kz API
 
@@ -76,25 +77,27 @@ To make tier 1 fully live in production:
 The source badge in the UI shows which tier served the results
 (`hh.kz · backend`, `hh.kz · direct`, or `curated demo set`).
 
-## OpenAI integration
+## AI integration (free, provider-agnostic)
 
-Set `OPENAI_API_KEY` in `.env` and the backend uses OpenAI; leave it empty and the app
-transparently falls back to the local heuristic parser/scorer (so it always runs).
+The LLM endpoints call any **OpenAI-compatible** API. The default is **Groq**, which has a
+free tier (no credit card) — get a key at https://console.groq.com/keys and set `LLM_API_KEY`.
+Leave it empty and the app transparently falls back to the local heuristic parser/scorer
+(so it always runs).
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `/api/ai/status` | GET | `{ enabled, model }` — frontend auto-detects on load |
+| `/api/ai/status` | GET | `{ enabled, model, provider }` — frontend auto-detects on load |
 | `/api/ai/parse-resume` | POST `{text}` | LLM resume → `{skills, soft, projects, education, domains, years}` |
 | `/api/ai/tailor` | POST `{resume, vacancy}` | `{matches, gaps, suggestions, summary}` for a role |
 
 Flow when enabled:
 1. PDF text is extracted client-side (pdf.js), then sent to `/api/ai/parse-resume` for richer parsing.
 2. The 10-card grid uses the fast local 40/30/30 score (stays well under the spec's 5s budget).
-3. The focused **AI Resume Patch** calls `/api/ai/tailor` for an LLM-written summary — a "✦ OpenAI" badge appears.
+3. The focused **AI Resume Patch** calls `/api/ai/tailor` for an LLM-written summary — a "✦ <provider>" badge appears.
 
-Model is configurable via `OPENAI_MODEL` (default `gpt-4o-mini`). Verified: with a key set the
-backend reaches `api.openai.com` and returns parsed JSON; without one it returns a clean
-`disabled` signal and the UI uses heuristics.
+Switch provider by setting `LLM_BASE_URL` + `LLM_MODEL` (e.g. OpenAI `https://api.openai.com/v1` +
+`gpt-4o-mini`, or Gemini `https://generativelanguage.googleapis.com/v1beta/openai` +
+`gemini-2.0-flash`). Without a key the API returns a clean `disabled` signal and the UI uses heuristics.
 
 ## Files
 
@@ -107,4 +110,4 @@ backend reaches `api.openai.com` and returns parsed JSON; without one it returns
 
 PostgreSQL (Supabase) caching of vacancies, user auth, and a RAG layer for embedding-based
 semantic search. The `Resume Parser` and `Fit Score Engine` are already isolated functions, and
-OpenAI is wired in — moving the full scorer server-side behind RAG is the remaining step.
+a provider-agnostic LLM is wired in — moving the full scorer server-side behind RAG is the remaining step.
