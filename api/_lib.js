@@ -100,17 +100,24 @@ async function callLLM(messages, { json = true, maxTokens = 700, temperature = 0
   const reqBody = { model: p.model, messages, temperature, max_tokens: maxTokens };
   if (json) reqBody.response_format = { type: "json_object" };
   if (p.extra) Object.assign(reqBody, p.extra);   // provider-specific tuning (e.g. Gemini thinking off)
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 22000);
-  const r = await fetch(p.baseUrl + "/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + p.apiKey },
-    body: JSON.stringify(reqBody),
-    signal: ctrl.signal,
-  }).finally(() => clearTimeout(t));
-  if (!r.ok) { const txt = await r.text(); const e = new Error(`${p.label} ${r.status}: ${txt.slice(0, 240)}`); e.status = r.status; throw e; }
-  const data = await r.json();
-  return data.choices?.[0]?.message?.content || "{}";
+  const headers = { "Content-Type": "application/json", "Authorization": "Bearer " + p.apiKey };
+  // retry transient 503 (free-tier "high demand") and network blips
+  let lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt) await new Promise(r => setTimeout(r, 400 * attempt));
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    let r;
+    try {
+      r = await fetch(p.baseUrl + "/chat/completions", { method: "POST", headers, body: JSON.stringify(reqBody), signal: ctrl.signal });
+    } catch (e) { clearTimeout(t); lastErr = e; continue; }      // network/abort → retry
+    clearTimeout(t);
+    if (r.status === 503) { lastErr = new Error(`${p.label} 503 (busy)`); continue; }
+    if (!r.ok) { const txt = await r.text(); const e = new Error(`${p.label} ${r.status}: ${txt.slice(0, 240)}`); e.status = r.status; throw e; }
+    const data = await r.json();
+    return data.choices?.[0]?.message?.content || "{}";
+  }
+  throw (lastErr instanceof Error ? lastErr : new Error(`${p.label} unavailable`));
 }
 
 async function aiParseResume(text, provider) {

@@ -132,14 +132,20 @@ async function callLLM(messages, { json = true, maxTokens = 700, temperature = 0
   const body = { model: p.model, messages, temperature, max_tokens: maxTokens };
   if (json) body.response_format = { type: "json_object" };
   if (p.extra) Object.assign(body, p.extra);   // provider-specific tuning (e.g. Gemini thinking off)
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 25000);
-  const r = await fetch(p.baseUrl + "/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + p.apiKey },
-    body: JSON.stringify(body),
-    signal: ctrl.signal,
-  }).finally(() => clearTimeout(t));
+  const headers = { "Content-Type": "application/json", "Authorization": "Bearer " + p.apiKey };
+  let r, lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {        // retry transient 503 / network blips
+    if (attempt) await new Promise(res => setTimeout(res, 400 * attempt));
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 9000);
+    try {
+      r = await fetch(p.baseUrl + "/chat/completions", { method: "POST", headers, body: JSON.stringify(body), signal: ctrl.signal });
+    } catch (e) { clearTimeout(t); lastErr = e; r = null; continue; }
+    clearTimeout(t);
+    if (r.status === 503) { lastErr = new Error(`${p.label} 503 (busy)`); continue; }
+    break;
+  }
+  if (!r) throw (lastErr instanceof Error ? lastErr : new Error(`${p.label} unavailable`));
   if (!r.ok) { const txt = await r.text(); const e = new Error(`${p.label} ${r.status}: ${txt.slice(0, 240)}`); e.status = r.status; throw e; }
   const data = await r.json();
   return data.choices?.[0]?.message?.content || "{}";
