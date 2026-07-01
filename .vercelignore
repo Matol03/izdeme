@@ -1,0 +1,9 @@
+# Never ship secrets or local-only files to Vercel.
+# Vercel was auto-loading the bundled .env — this stops that. Set the real
+# values as Vercel env vars (Project → Settings → Environment Variables).
+.env
+.env.*
+!.env.example
+
+# local docs / artifacts
+*.pdf
