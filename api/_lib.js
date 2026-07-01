@@ -9,7 +9,28 @@
 const HH_USER_AGENT = process.env.HH_USER_AGENT || "IzdeMe-JobAgent/1.0 (murat.askarov@nu.edu.kz)";
 const HH_AREA = process.env.HH_AREA || "40";   // 40 = Kazakhstan (hh.kz)
 const HH_HOST = process.env.HH_HOST || "hh.kz";
-const HH_TOKEN = process.env.HH_ACCESS_TOKEN || "";
+const HH_CLIENT_ID = process.env.HH_CLIENT_ID || "";
+const HH_CLIENT_SECRET = process.env.HH_CLIENT_SECRET || "";
+// App access token: a static HH_ACCESS_TOKEN wins; otherwise obtained via
+// client_credentials and cached (the token endpoint is DDoS-guarded, so hit it rarely).
+let _hhTok = process.env.HH_ACCESS_TOKEN || "";
+let _hhTokExp = _hhTok ? Infinity : 0;
+async function hhToken(force) {
+  const now = Date.now();
+  if (!force && _hhTok && now < _hhTokExp) return _hhTok;
+  if (!HH_CLIENT_ID || !HH_CLIENT_SECRET) return _hhTok;      // nothing to refresh with
+  try {
+    const r = await fetch("https://api.hh.ru/token", {
+      method: "POST",
+      headers: { "User-Agent": HH_USER_AGENT, "Content-Type": "application/x-www-form-urlencoded" },
+      body: `grant_type=client_credentials&client_id=${encodeURIComponent(HH_CLIENT_ID)}&client_secret=${encodeURIComponent(HH_CLIENT_SECRET)}`,
+    });
+    if (!r.ok) return _hhTok;                                 // keep any existing token
+    const j = await r.json();
+    if (j.access_token) { _hhTok = j.access_token; _hhTokExp = now + ((j.expires_in || 1209600) * 1000) - 60000; }
+    return _hhTok;
+  } catch { return _hhTok; }
+}
 // LLM providers — all OpenAI-compatible endpoints. The frontend can switch between
 // any that have a key configured. Both have free tiers (no credit card).
 const PROVIDERS = {
@@ -65,12 +86,20 @@ async function fetchVacancies(query, { page = 0, perPage = 30 } = {}) {
   url.searchParams.set("per_page", String(perPage));
   url.searchParams.set("page", String(page));
 
-  const headers = { "User-Agent": HH_USER_AGENT, "Accept": "application/json" };
-  if (HH_TOKEN) headers["Authorization"] = "Bearer " + HH_TOKEN;
+  const doFetch = async (tok) => {
+    const headers = { "User-Agent": HH_USER_AGENT, "Accept": "application/json" };
+    if (tok) headers["Authorization"] = "Bearer " + tok;      // authenticated → passes DDoS-Guard
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    try { return await fetch(url, { headers, signal: ctrl.signal }); } finally { clearTimeout(t); }
+  };
 
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 7000);
-  const r = await fetch(url, { headers, signal: ctrl.signal }).finally(() => clearTimeout(t));
+  let tok = await hhToken();
+  let r = await doFetch(tok);
+  if ((r.status === 401 || r.status === 403) && HH_CLIENT_ID && HH_CLIENT_SECRET) {
+    tok = await hhToken(true);                                // token stale/missing → refresh once
+    if (tok) r = await doFetch(tok);
+  }
 
   if (!r.ok) {
     const err = new Error("hh responded " + r.status);
@@ -168,7 +197,7 @@ async function aiTailor(resume, vacancy, provider) {
 }
 
 module.exports = {
-  HH_USER_AGENT, HH_AREA, HH_HOST, HH_TOKEN,
+  HH_USER_AGENT, HH_AREA, HH_HOST, HH_CLIENT_ID, hhToken,
   PROVIDERS, DEFAULT_PROVIDER, providerOf, providerStatus,
   body, fetchVacancies, callLLM, aiParseResume, aiTailor,
 };

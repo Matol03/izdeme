@@ -34,7 +34,28 @@ const ROOT = __dirname;
 const HH_USER_AGENT = process.env.HH_USER_AGENT || "IzdeMe-JobAgent/1.0 (murat.askarov@nu.edu.kz)";
 const HH_AREA = process.env.HH_AREA || "40";    // 40 = Kazakhstan (hh.kz)
 const HH_HOST = process.env.HH_HOST || "hh.kz";
-const HH_TOKEN = process.env.HH_ACCESS_TOKEN || ""; // optional OAuth token (whitelists you past throttling)
+const HH_CLIENT_ID = process.env.HH_CLIENT_ID || "";
+const HH_CLIENT_SECRET = process.env.HH_CLIENT_SECRET || "";
+// App access token: static HH_ACCESS_TOKEN wins; else obtained via client_credentials
+// and cached (the token endpoint is DDoS-guarded, so hit it rarely).
+let _hhTok = process.env.HH_ACCESS_TOKEN || "";
+let _hhTokExp = _hhTok ? Infinity : 0;
+async function hhToken(force) {
+  const now = Date.now();
+  if (!force && _hhTok && now < _hhTokExp) return _hhTok;
+  if (!HH_CLIENT_ID || !HH_CLIENT_SECRET) return _hhTok;
+  try {
+    const r = await fetch("https://api.hh.ru/token", {
+      method: "POST",
+      headers: { "User-Agent": HH_USER_AGENT, "Content-Type": "application/x-www-form-urlencoded" },
+      body: `grant_type=client_credentials&client_id=${encodeURIComponent(HH_CLIENT_ID)}&client_secret=${encodeURIComponent(HH_CLIENT_SECRET)}`,
+    });
+    if (!r.ok) return _hhTok;
+    const j = await r.json();
+    if (j.access_token) { _hhTok = j.access_token; _hhTokExp = now + ((j.expires_in || 1209600) * 1000) - 60000; }
+    return _hhTok;
+  } catch { return _hhTok; }
+}
 
 // LLM providers — all OpenAI-compatible. Frontend can switch between any with a key.
 // Both Groq and Gemini have free tiers (no credit card).
@@ -87,18 +108,25 @@ async function fetchVacancies(query, { page = 0, perPage = 30 } = {}) {
   url.searchParams.set("per_page", String(perPage));
   url.searchParams.set("page", String(page));
 
-  const headers = { "User-Agent": HH_USER_AGENT, "Accept": "application/json" };
-  if (HH_TOKEN) headers["Authorization"] = "Bearer " + HH_TOKEN;
+  const doFetch = async (tok) => {
+    const headers = { "User-Agent": HH_USER_AGENT, "Accept": "application/json" };
+    if (tok) headers["Authorization"] = "Bearer " + tok;      // authenticated → passes DDoS-Guard
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    try { return await fetch(url, { headers, signal: ctrl.signal }); } finally { clearTimeout(t); }
+  };
 
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 7000);
-  const r = await fetch(url, { headers, signal: ctrl.signal }).finally(() => clearTimeout(t));
+  let tok = await hhToken();
+  let r = await doFetch(tok);
+  if ((r.status === 401 || r.status === 403) && HH_CLIENT_ID && HH_CLIENT_SECRET) {
+    tok = await hhToken(true);                                // token stale/missing → refresh once
+    if (tok) r = await doFetch(tok);
+  }
 
-  const server = r.headers.get("server") || "";
   if (!r.ok) {
     const err = new Error("hh responded " + r.status);
     err.status = r.status;
-    err.ddosGuard = /ddos-guard/i.test(server);
+    err.ddosGuard = /ddos-guard/i.test(r.headers.get("server") || "");
     throw err;
   }
   const data = await r.json();
@@ -211,7 +239,7 @@ const server = http.createServer(async (req, res) => {
 
   // --- API: health ---
   if (u.pathname === "/api/health") {
-    return send(res, 200, { ok: true, userAgent: HH_USER_AGENT, area: HH_AREA, host: HH_HOST, oauth: !!HH_TOKEN });
+    return send(res, 200, { ok: true, userAgent: HH_USER_AGENT, area: HH_AREA, host: HH_HOST, oauth: !!HH_CLIENT_ID });
   }
 
   // --- API: live vacancy search from hh.kz ---
@@ -281,7 +309,7 @@ server.listen(PORT, () => {
   console.log(`\n  IzdeMe backend  →  http://localhost:${PORT}`);
   console.log(`  hh.kz proxy     →  /api/vacancies?text=...  (area=${HH_AREA}, host=${HH_HOST})`);
   console.log(`  User-Agent      →  ${HH_USER_AGENT}`);
-  console.log(`  OAuth token     →  ${HH_TOKEN ? "set ✓" : "not set (optional)"}`);
+  console.log(`  hh OAuth        →  ${HH_CLIENT_ID ? "client_credentials ✓ (authenticated → bypasses DDoS-Guard)" : "none → unauth (DDoS-Guard may block server-side)"}`);
   const ps = providerStatus();
   console.log(`  LLM providers   →  ${ps.providers.map(p => `${p.label}${p.enabled ? " ✓" : " ✗"}`).join("  ")}  (default: ${ps.default})`);
   if (!ps.providers.some(p => p.enabled)) console.log(`                     no key → local heuristic fallback`);
