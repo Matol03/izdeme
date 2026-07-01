@@ -217,6 +217,9 @@
 
   .hero h1{font-weight:700;letter-spacing:-.035em}
 
+  .badge,.step{background:linear-gradient(155deg,rgba(255,255,255,.09),rgba(255,255,255,.025));backdrop-filter:blur(14px) saturate(150%);-webkit-backdrop-filter:blur(14px) saturate(150%);border:1px solid rgba(255,255,255,.12);box-shadow:inset 0 1px 0 rgba(255,255,255,.14)}
+  .step.done{border-color:rgba(39,211,154,.4)}
+
   .search-box{padding:8px 8px 8px 22px;border-radius:999px;
     background:linear-gradient(155deg,rgba(255,255,255,.11),rgba(255,255,255,.03));
     backdrop-filter:blur(18px) saturate(170%);-webkit-backdrop-filter:blur(18px) saturate(170%);
@@ -286,7 +289,14 @@
 
 <main class="wrap">
   <section class="hero" id="hero">
+    <div class="badge"><span class="dot"></span> Semantic search · HeadHunter · Groq LLM</div>
     <h1>Describe your dream <span class="grad">job.</span></h1>
+
+    <div class="steps">
+      <div class="step" id="step1"><span class="n">1</span> <b>Upload</b> resume</div>
+      <div class="step" id="step2"><span class="n">2</span> <b>Describe</b> the role</div>
+      <div class="step" id="step3"><span class="n">3</span> <b>Match</b> &amp; tailor</div>
+    </div>
 
     <div class="search-shell">
       <div class="search-box">
@@ -759,7 +769,7 @@ function updateAiLabels(){
   const info=PROVIDERS_LIST.find(p=>p.id===SELECTED_PROVIDER);
   AI_PROVIDER=info?info.label:"AI"; AI_MODEL=info?info.model:"";
   const badge=document.querySelector(".badge");
-  if(badge&&AI_ENABLED) badge.innerHTML='<span class="dot"></span> Semantic search · hh.kz · '+AI_PROVIDER+' '+AI_MODEL;
+  if(badge&&AI_ENABLED) badge.innerHTML='<span class="dot"></span> Semantic search · HeadHunter · '+AI_PROVIDER+' LLM';
   const sub=document.querySelector("#dropzone .dz-txt span");
   if(sub&&AI_ENABLED) sub.textContent="PDF — parsed by "+AI_PROVIDER+" into skills, projects & education for an accurate Fit Score";
   document.querySelectorAll("#aiSwitch .sw-btn").forEach(b=>b.classList.toggle("active",b.dataset.id===SELECTED_PROVIDER));
@@ -825,6 +835,7 @@ function renderProfile(){
     <button class="json-toggle" style="margin-top:12px" onclick="document.getElementById('pjson').classList.toggle('show')">⟨ ⟩ view parsed JSON</button>
     <pre class="json" id="pjson">${esc(json)}</pre>`;
   p.classList.add("show");
+  document.getElementById("step1")?.classList.add("done");
 }
 
 async function onFile(file){
@@ -955,6 +966,7 @@ async function runMatch(){
   const query=document.getElementById("prompt").value.trim();
   if(!query){ document.getElementById("prompt").focus(); return; }
   CURRENT.query=query;
+  document.getElementById("step2")?.classList.add("done");
 
   // No resume yet → derive a lightweight profile from the query so it still works.
   if(!RESUME){ RESUME=parseResume(query+" "+query); RESUME._fromQuery=true; }
@@ -982,6 +994,7 @@ async function runMatch(){
   items.sort((a,b)=> (b._rel*8+b._a.score) - (a._rel*8+a._a.score));
   const top=items.slice(0,10);
   CURRENT.vacancies=top; CURRENT.source=source;
+  document.getElementById("step3")?.classList.add("done");
 
   document.getElementById("grid").innerHTML=top.map(card).join("");
   document.getElementById("countLbl").textContent=`Top ${top.length} matches`;
