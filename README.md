@@ -10,6 +10,66 @@ Frontend (index.html)  ──▶  Backend API (server.js)  ──▶  Job Fetche
    └─ matches / gaps / suggestions           └─ curated fallback on block
 ```
 
+## How it works
+
+> Full deep-dive with all formulas: [ARCHITECTURE.md](ARCHITECTURE.md).
+
+### What the AI is responsible for
+
+The LLM (Groq by default, Gemini switchable — any OpenAI-compatible model) handles the
+**language-understanding** parts only:
+
+1. **Résumé parsing** (`/api/ai/parse-resume`) — turns the raw PDF text into structured
+   JSON: `name, title, skills, soft skills, experience, projects, education, domains,
+   languages, years, seniority`. The prompt is deliberately strict — *extract only what
+   is explicitly written; never invent skills or dates.*
+2. **Résumé tailoring & reasoning** (`/api/ai/tailor`) — for a chosen vacancy, writes a
+   2–3 sentence tailored summary and phrases the **matches / gaps / suggestions**.
+
+What the AI does **not** do: it does **not** fetch vacancies and does **not** decide the
+match percentage. Vacancy selection and the Fit Score are **deterministic** code, so
+results are reproducible and explainable. The AI is also **optional** — with no API key
+the app falls back to a local heuristic parser that produces the same JSON shape, so
+everything still works offline.
+
+### How vacancies are selected
+
+1. **Query** — the user's prompt ("describe your dream job") or a clicked recommendation
+   chip (e.g. *Remote job*, *Python*, *Data-driven management*).
+2. **Source** — vacancies come from the **HeadHunter API** for Kazakhstan
+   (`api.hh.ru/vacancies?area=40&host=hh.kz`, `order_by=relevance`), fetched through a
+   **3-tier chain** so results always appear: authenticated backend proxy → direct
+   client call → curated fallback set. Up to ~30 candidates are pulled per query.
+3. **Rank & trim** — each candidate gets a **query-relevance** score (how many prompt
+   words/skills appear in its title + requirements + responsibilities; skills count
+   double) which is blended with its Fit Score, then the **top 10** are shown:
+
+   ```
+   rankScore = queryRelevance · 8 + FitScore%
+   ```
+
+   This keeps results both **on-topic** (relevance) and **well-suited to you** (fit).
+
+### How the match (Fit Score) is calculated
+
+For every vacancy IzdeMe compares **your parsed résumé** against the **vacancy's
+requirements** (the same skill/soft/domain extractors run over the job text). The match
+is a weighted, explainable **Fit Score = Hard skills 40% · Experience 30% · Soft skills 30%**:
+
+| Component | Weight | How it's measured |
+|---|---|---|
+| **Hard skills** | 40% | share of the job's required technical skills you already have |
+| **Experience** | 30% | project/keyword coverage (55%) + seniority vs. required years (30%) + domain match (15%) |
+| **Soft skills** | 30% | overlap of soft skills (communication, leadership, …) |
+
+```
+FitScore% = clamp( round( 0.40·hard + 0.30·experience + 0.30·soft ) , 35 , 99 )
+```
+
+The three sub-scores are shown as the Hard/Experience/Soft bars on each card, and the
+score is decoded into **Matches** (skills you have that the job needs), **Gaps** (skills
+it needs that you lack), and **Suggestions** (concrete steps to raise the score).
+
 ## Run
 
 ```bash
@@ -110,7 +170,9 @@ Switch provider by setting `LLM_BASE_URL` + `LLM_MODEL` (e.g. OpenAI `https://ap
 ## Files
 
 - `index.html` — frontend (UI, resume parsing, scoring, explainability)
-- `server.js` — Node backend (static serving + hh.kz proxy)
+- `server.js` — Node backend for local dev (static serving + hh.kz proxy + AI routes)
+- `api/` — Vercel serverless functions (prod); shared logic in `api/_lib.js`
+- `ARCHITECTURE.md` — full algorithm & data-flow writeup
 - `.env` / `.env.example` — configuration
 - `package.json` — `npm start`
 
