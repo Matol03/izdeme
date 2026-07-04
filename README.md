@@ -32,23 +32,26 @@ results are reproducible and explainable. The AI is also **optional** — with n
 the app falls back to a local heuristic parser that produces the same JSON shape, so
 everything still works offline.
 
-### How vacancies are selected
+### How vacancies are selected (LLM-optimized)
 
-1. **Query** — the user's prompt ("describe your dream job") or a clicked recommendation
-   chip (e.g. *Remote job*, *Python*, *Data-driven management*).
-2. **Source** — vacancies come from the **HeadHunter API** for Kazakhstan
-   (`api.hh.ru/vacancies?area=40&host=hh.kz`, `order_by=relevance`), fetched through a
-   **3-tier chain** so results always appear: authenticated backend proxy → direct
-   client call → curated fallback set. Up to ~30 candidates are pulled per query.
-3. **Rank & trim** — each candidate gets a **query-relevance** score (how many prompt
-   words/skills appear in its title + requirements + responsibilities; skills count
-   double) which is blended with its Fit Score, then the **top 10** are shown:
+The prompt drives an **LLM search pipeline** (`/api/search`, free Groq by default):
 
-   ```
-   rankScore = queryRelevance · 8 + FitScore%
-   ```
+1. **Plan** — the LLM turns the request into precise HeadHunter **filters**, so search
+   uses real vacancy metadata instead of a raw text dump:
+   `{ text (role + core skills), city → area id, remote → schedule, experience,
+   employment, salary }`. E.g. *"remote Python developer in Almaty, 3+ years"* →
+   `text="python developer", area=160 (Almaty), schedule=remote, experience=between3And6`.
+2. **Fetch** — up to ~40 candidates from `api.hh.ru/vacancies` with those filters
+   (via the authenticated proxy). If strict filters return nothing, it relaxes to
+   text + city and retries.
+3. **Rank by metadata** — the LLM scores every candidate 0–100 against the request,
+   weighing **all** metadata (role/skills, **city**, **remote vs on-site**, seniority,
+   salary) and returns a one-line reason per match. Results are ordered by this score;
+   each card shows the reason + `% match`.
 
-   This keeps results both **on-topic** (relevance) and **well-suited to you** (fit).
+If no LLM key is set (or a call fails), it **falls back** to a plain HeadHunter search
+(3-tier: authenticated proxy → direct client call → curated set) ranked locally by
+`queryRelevance · 8 + FitScore%`. Either way the **top 10** are shown.
 
 ### How the match (Fit Score) is calculated
 

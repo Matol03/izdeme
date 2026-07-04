@@ -9,6 +9,14 @@
 const HH_USER_AGENT = process.env.HH_USER_AGENT || "IzdeMe-JobAgent/1.0 (murat.askarov@nu.edu.kz)";
 const HH_AREA = process.env.HH_AREA || "40";   // 40 = Kazakhstan (hh.kz)
 const HH_HOST = process.env.HH_HOST || "hh.kz";
+// hh.kz city → area id (verified from api.hh.ru/areas/40)
+const KZ_AREAS = {
+  kazakhstan:40, almaty:160, "alma-ata":160, astana:159, "nur-sultan":159, nursultan:159,
+  shymkent:205, chimkent:205, karaganda:177, karagandy:177, aktobe:154, atyrau:153,
+  pavlodar:181, kostanay:172, kostanai:172, kyzylorda:174, taraz:187, semey:185, semipalatinsk:185,
+  aktau:152, kokshetau:176, taldykorgan:188, temirtau:190, "ust-kamenogorsk":194, oskemen:194, petropavlovsk:180,
+};
+const cityToArea = c => KZ_AREAS[String(c || "").toLowerCase().trim()] || HH_AREA;
 const HH_CLIENT_ID = process.env.HH_CLIENT_ID || "";
 const HH_CLIENT_SECRET = process.env.HH_CLIENT_SECRET || "";
 // App access token: a static HH_ACCESS_TOKEN wins; otherwise obtained via
@@ -77,14 +85,19 @@ function body(req) {
 }
 
 /* ---------- hh.kz vacancy proxy ---------- */
-async function fetchVacancies(query, { page = 0, perPage = 30 } = {}) {
+async function fetchVacancies(query, opts = {}) {
+  const { page = 0, perPage = 30, area, schedule, experience, employment, salary, orderBy } = opts;
   const url = new URL("https://api.hh.ru/vacancies");
   url.searchParams.set("text", query);
-  url.searchParams.set("area", HH_AREA);
+  url.searchParams.set("area", area || HH_AREA);
   url.searchParams.set("host", HH_HOST);
-  url.searchParams.set("order_by", "relevance");
+  url.searchParams.set("order_by", orderBy || "relevance");
   url.searchParams.set("per_page", String(perPage));
   url.searchParams.set("page", String(page));
+  if (schedule) url.searchParams.set("schedule", schedule);         // e.g. "remote"
+  if (experience) url.searchParams.set("experience", experience);   // noExperience|between1And3|between3And6|moreThan6
+  if (employment) url.searchParams.set("employment", employment);   // full|part|project
+  if (salary) { url.searchParams.set("salary", String(salary)); url.searchParams.set("only_with_salary", "true"); }
 
   const doFetch = async (tok) => {
     const headers = { "User-Agent": HH_USER_AGENT, "Accept": "application/json" };
@@ -196,8 +209,77 @@ async function aiTailor(resume, vacancy, provider) {
   return JSON.parse(content);
 }
 
+/* ---------- LLM-optimized vacancy search ---------- */
+
+// 1) prompt → structured hh.kz search filters (keywords, city, remote, experience, salary…)
+async function aiSearchPlan(prompt, provider) {
+  const content = await callLLM([
+    { role: "system", content: "You convert a job seeker's request into HeadHunter (hh.kz) search filters. Reply with strict JSON only." },
+    { role: "user", content:
+`From the request, output JSON with EXACTLY these keys:
+- "text": concise full-text keywords — the role and core skills ONLY, no city or remote words (e.g. "python backend developer").
+- "city": the city in English if one is named, from [Almaty, Astana, Shymkent, Karaganda, Aktobe, Atyrau, Pavlodar, Kostanay, Kyzylorda, Taraz, Semey, Aktau, Kokshetau, Taldykorgan, Temirtau, Ust-Kamenogorsk, Petropavlovsk], else "".
+- "remote": true if remote/online/work-from-home is wanted, else false.
+- "experience": one of "noExperience","between1And3","between3And6","moreThan6", or "".
+- "employment": one of "full","part","project", or "".
+- "salary": integer monthly salary in KZT if a number is stated, else null.
+
+Request: """${String(prompt).slice(0, 700)}"""
+Rules: JSON only, no prose. Use "" / null when not stated.` },
+  ], { maxTokens: 300, temperature: 0, provider });
+  return JSON.parse(content);
+}
+
+// 2) rank fetched vacancies against the prompt using ALL metadata (city, remote, salary, seniority…)
+async function aiRankVacancies(prompt, items, provider) {
+  const compact = items.slice(0, 40).map((v, i) => ({
+    i, title: v.name, company: v.company, city: v.area,
+    schedule: v.schedule || "", experience: v.experience || "",
+    salary: v.salary ? `${v.salary[0] || ""}-${v.salary[1] || ""} ${v.salary[2] || ""}`.trim() : "n/a",
+    req: (v.requirements || "").slice(0, 130),
+  }));
+  const content = await callLLM([
+    { role: "system", content: "You are a vacancy-matching engine. Score how well each vacancy matches the seeker's request, weighing ALL metadata: role/skills, city, remote vs on-site (schedule), seniority/experience, and salary. Reply with strict JSON only." },
+    { role: "user", content:
+`Request: """${String(prompt).slice(0, 700)}"""
+
+Vacancies: ${JSON.stringify(compact)}
+
+Return JSON {"ranked":[{"i":<index>,"score":<0-100>,"reason":"<max 9 words>"}]} sorted best first. Include only vacancies with score >= 45.` },
+  ], { maxTokens: 1400, temperature: 0, provider });
+  const j = JSON.parse(content);
+  return Array.isArray(j.ranked) ? j.ranked : [];
+}
+
+// 3) full pipeline: plan → fetch (filtered) → rank
+async function aiSearch(prompt, provider) {
+  const plan = await aiSearchPlan(prompt, provider);          // throws NO_KEY if no LLM → caller falls back
+  const area = cityToArea(plan.city);
+  const opts = { perPage: 40, area,
+    schedule: plan.remote ? "remote" : undefined,
+    experience: plan.experience || undefined,
+    employment: plan.employment || undefined,
+    salary: plan.salary || undefined };
+
+  let { items } = await fetchVacancies(plan.text || prompt, opts);
+  // if strict filters returned nothing, relax to text + area only (keep the city)
+  if (!items.length && (opts.schedule || opts.experience || opts.employment || opts.salary)) {
+    ({ items } = await fetchVacancies(plan.text || prompt, { perPage: 40, area }));
+  }
+
+  let ranked = [];
+  try { ranked = await aiRankVacancies(prompt, items, provider); } catch (e) { /* keep hh order */ }
+
+  const out = ranked.length
+    ? ranked.map(r => items[r.i] ? { ...items[r.i], _match: r.score, _reason: r.reason } : null).filter(Boolean)
+    : items.map(v => ({ ...v }));
+
+  return { plan: { ...plan, area }, items: out.slice(0, 15) };
+}
+
 module.exports = {
   HH_USER_AGENT, HH_AREA, HH_HOST, HH_CLIENT_ID, hhToken,
   PROVIDERS, DEFAULT_PROVIDER, providerOf, providerStatus,
   body, fetchVacancies, callLLM, aiParseResume, aiTailor,
+  aiSearchPlan, aiRankVacancies, aiSearch,
 };

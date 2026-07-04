@@ -110,10 +110,32 @@ Two interchangeable parsers produce the **same JSON shape**:
 
 ---
 
-## 5. Stage 3 — Vacancy retrieval (`fetchVacancies`)
+## 5. Stage 3 — Vacancy retrieval
 
-The prompt (or a clicked recommendation chip) is sent to HeadHunter. A **3-tier
-fallback** guarantees data:
+### Primary path — LLM-optimized search (`/api/search` → `aiSearch`)
+
+Instead of dumping the raw prompt into hh's `text` field, the LLM first **plans a
+structured query** (`aiSearchPlan`) so the search uses real vacancy **metadata**:
+
+```
+prompt ──LLM──▶ { text (role + core skills),
+                  city   → hh area id (Almaty=160, Astana=159, …),
+                  remote → schedule=remote,
+                  experience (noExperience | between1And3 | between3And6 | moreThan6),
+                  employment, salary }
+```
+
+Those filters are applied to `api.hh.ru/vacancies` (up to ~40 candidates; if strict
+filters return nothing it relaxes to text + city and retries). The candidates are then
+**re-ranked by the LLM** (`aiRankVacancies`): each vacancy's full metadata (title,
+company, **city**, **schedule/remote**, **experience**, **salary**, requirements) is
+scored 0–100 against the request, with a one-line reason. This is the "matched with
+information from the prompt" step. Runs on the free Groq model.
+
+### Fallback path — plain 3-tier fetch (`fetchVacancies`)
+
+If no LLM key is set (or `/api/search` errors), the prompt is searched directly with a
+**3-tier fallback** that guarantees data:
 
 1. **Backend proxy** `/api/vacancies` → `api.hh.ru/vacancies?area=40&host=hh.kz`
    (Kazakhstan). Requests carry an **OAuth application token** obtained via the
@@ -176,13 +198,19 @@ Soft bars) and the `matches` / `gaps` skill sets.
 
 ## 7. Stage 5 — Ranking
 
-Fit alone isn't enough — a perfect-fit but off-topic role shouldn't top the list. So
-IzdeMe computes a lightweight **query-relevance** score per vacancy (how many prompt
-words/skills appear in its text; skills weighted ×2), then ranks by a blend:
+Two distinct axes are kept separate: **prompt-match** (does this role match what you
+asked for?) and **résumé-fit** (how well does *your CV* fit it?).
 
-```
-rankScore = queryRelevance · 8 + Fit%
-```
+- **LLM path** — order is driven by the **LLM metadata match score** (Stage 3), so the
+  list reflects the request's city/remote/seniority/salary intent. The résumé Fit Score
+  is still computed and shown per card.
+- **Fallback path** (no LLM) — a lightweight **query-relevance** score (how many prompt
+  words/skills appear in the vacancy text; skills ×2) blended with fit:
+  ```
+  rankScore = queryRelevance · 8 + Fit%
+  ```
+
+Either way, the **top 10** are shown.
 
 Sorted descending, the **top 10** are shown.
 
