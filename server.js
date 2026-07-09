@@ -108,18 +108,19 @@ const clean = s => (s || "").replace(/<\/?highlighttext>/g, "");
 
 /* ---------- hh.kz vacancy proxy ---------- */
 async function fetchVacancies(query, opts = {}) {
-  const { page = 0, perPage = 30, area, schedule, experience, employment, salary, orderBy } = opts;
+  const { page = 0, perPage = 30, area, schedule, experience, employment, salary, onlyWithSalary, orderBy } = opts;
   const url = new URL("https://api.hh.ru/vacancies");
   url.searchParams.set("text", query);
   url.searchParams.set("area", area || HH_AREA);
   url.searchParams.set("host", HH_HOST);
-  url.searchParams.set("order_by", orderBy || "relevance");
+  url.searchParams.set("order_by", orderBy || "relevance");         // relevance|salary_desc|salary_asc|publication_time
   url.searchParams.set("per_page", String(perPage));
   url.searchParams.set("page", String(page));
   if (schedule) url.searchParams.set("schedule", schedule);
   if (experience) url.searchParams.set("experience", experience);
   if (employment) url.searchParams.set("employment", employment);
-  if (salary) { url.searchParams.set("salary", String(salary)); url.searchParams.set("only_with_salary", "true"); }
+  if (salary) url.searchParams.set("salary", String(salary));       // min monthly salary
+  if (salary || onlyWithSalary) url.searchParams.set("only_with_salary", "true");
 
   const doFetch = async (tok) => {
     const headers = { "User-Agent": HH_USER_AGENT, "Accept": "application/json" };
@@ -244,19 +245,34 @@ async function aiTailor(resume, vacancy, provider) {
 /* ---------- LLM-optimized vacancy search ---------- */
 async function aiSearchPlan(prompt, provider) {
   const content = await callLLM([
-    { role: "system", content: "You convert a job seeker's request into HeadHunter (hh.kz) search filters. Reply with strict JSON only." },
+    { role: "system", content: "You are a search-query engineer for HeadHunter (hh.kz). You turn a job seeker's natural-language request — conversational, multi-constraint, English or Russian — into precise hh.kz search filters. Reply with strict JSON only." },
     { role: "user", content:
-`From the request, output JSON with EXACTLY these keys:
-- "text": concise full-text keywords — the role and core skills ONLY, no city or remote words (e.g. "python backend developer").
-- "city": the city in English if one is named, from [Almaty, Astana, Shymkent, Karaganda, Aktobe, Atyrau, Pavlodar, Kostanay, Kyzylorda, Taraz, Semey, Aktau, Kokshetau, Taldykorgan, Temirtau, Ust-Kamenogorsk, Petropavlovsk], else "".
-- "remote": true if remote/online/work-from-home is wanted, else false.
-- "experience": one of "noExperience","between1And3","between3And6","moreThan6", or "".
-- "employment": one of "full","part","project", or "".
-- "salary": integer monthly salary in KZT if a number is stated, else null.
+`Convert the request into hh.kz search filters. Output JSON with EXACTLY these keys:
 
-Request: """${String(prompt).slice(0, 700)}"""
-Rules: JSON only, no prose. Use "" / null when not stated.` },
-  ], { maxTokens: 300, temperature: 0, provider });
+- "text": the hh.kz full-text query. Use hh query language and include ONLY the role + must-have skills (NEVER the city, remote, salary or experience — those are separate fields below):
+    • operators AND / OR / NOT must be UPPERCASE.
+    • group interchangeable roles/skills in parentheses with OR: (python OR django) backend
+    • quote exact multi-word phrases with double quotes: "machine learning".
+    • exclude what the seeker rejects with NOT: NOT manager
+    • stay focused — 2–6 concepts, no filler words.
+- "textSimple": the same core role/skills as plain space-separated keywords, no operators or quotes (fallback if "text" is too strict). e.g. "python backend developer".
+- "city": one city in English from [Almaty, Astana, Shymkent, Karaganda, Aktobe, Atyrau, Pavlodar, Kostanay, Kyzylorda, Taraz, Semey, Aktau, Kokshetau, Taldykorgan, Temirtau, Ust-Kamenogorsk, Petropavlovsk] if one is named (translate Russian names, e.g. Алматы→Almaty), else "".
+- "remote": true if remote / online / work-from-home / удалёнка is wanted, else false.
+- "experience": map the seeker's seniority to one of "noExperience" (intern, graduate, no experience), "between1And3" (junior, 1–3 yrs), "between3And6" (middle/senior, 3–6 yrs), "moreThan6" (lead, 6+ yrs), or "" if unstated.
+- "employment": one of "full","part","project", or "".
+- "salary": integer desired MONTHLY salary if a number is given ("400k"→400000, "от 500000"→500000), else null.
+- "onlyWithSalary": true if the seeker sets a minimum pay or insists the salary be disclosed, else false.
+- "orderBy": "salary_desc" if they want the highest-paying roles, "publication_time" if they want the newest, else "relevance".
+
+Examples:
+Request: "remote python or golang backend, entry level, not fintech, at least 400k"
+JSON: {"text":"(python OR golang) backend NOT fintech","textSimple":"python golang backend","city":"","remote":true,"experience":"noExperience","employment":"","salary":400000,"onlyWithSalary":true,"orderBy":"relevance"}
+Request: "ищу работу senior аналитиком данных в Алматы, хочу самую высокую зарплату"
+JSON: {"text":"(data analyst OR analytics)","textSimple":"data analyst","city":"Almaty","remote":false,"experience":"between3And6","employment":"","salary":null,"onlyWithSalary":false,"orderBy":"salary_desc"}
+
+Request: """${String(prompt).slice(0, 900)}"""
+Rules: JSON only, no prose. Use "" / null / false when a field is not stated.` },
+  ], { maxTokens: 420, temperature: 0, provider });
   return JSON.parse(content);
 }
 async function aiRankVacancies(prompt, items, provider) {
@@ -281,14 +297,25 @@ Return JSON {"ranked":[{"i":<index>,"score":<0-100>,"reason":"<max 9 words>"}]} 
 async function aiSearch(prompt, provider) {
   const plan = await aiSearchPlan(prompt, provider);
   const area = cityToArea(plan.city);
-  const opts = { perPage: 40, area,
+  const advText = (plan.text || "").trim() || (plan.textSimple || "").trim() || prompt;
+  const simpleText = (plan.textSimple || "").trim();
+  // whitelist against hh's accepted order_by values — the LLM can hallucinate others,
+  // and an unknown order_by makes hh 400 (killing every fetch below, including the relaxes).
+  const orderBy = ["salary_desc", "salary_asc", "publication_time"].includes(plan.orderBy) ? plan.orderBy : undefined;
+  const opts = { perPage: 40, area, orderBy,
     schedule: plan.remote ? "remote" : undefined,
     experience: plan.experience || undefined,
     employment: plan.employment || undefined,
-    salary: plan.salary || undefined };
-  let { items } = await fetchVacancies(plan.text || prompt, opts);
-  if (!items.length && (opts.schedule || opts.experience || opts.employment || opts.salary)) {
-    ({ items } = await fetchVacancies(plan.text || prompt, { perPage: 40, area }));
+    salary: plan.salary || undefined,
+    onlyWithSalary: plan.onlyWithSalary || undefined };
+  let { items } = await fetchVacancies(advText, opts);
+  // relax 1: strict filters returned nothing → keep the advanced text + area (+ ordering) only
+  if (!items.length && (opts.schedule || opts.experience || opts.employment || opts.salary || opts.onlyWithSalary)) {
+    ({ items } = await fetchVacancies(advText, { perPage: 40, area, orderBy }));
+  }
+  // relax 2: the boolean query itself is too strict → fall back to plain keywords
+  if (!items.length && simpleText && simpleText !== advText) {
+    ({ items } = await fetchVacancies(simpleText, { perPage: 40, area, orderBy }));
   }
   let ranked = [];
   try { ranked = await aiRankVacancies(prompt, items, provider); } catch (e) { /* keep hh order */ }
