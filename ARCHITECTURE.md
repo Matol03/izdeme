@@ -8,6 +8,11 @@ résumé summary.
 
 ## 1. High-level architecture
 
+> **In simple terms:** The app is a web page that talks to a few small backend routes.
+> The page reads your PDF and does the quick scoring itself; the backend fetches jobs
+> from hh.kz and uses an LLM for the smart language parts. The backend ships as two
+> matching copies — one for local dev, one for Vercel.
+
 ```
                          ┌─────────────────────────────────────────────┐
    Browser (client)      │  index.html  (vanilla JS, no build step)     │
@@ -41,6 +46,10 @@ the LLM) has a fallback, so the product always produces a result:
 
 ## 2. End-to-end pipeline
 
+> **In simple terms:** Two things go in — your résumé and your job wish. The résumé
+> becomes structured data and the wish becomes a job search; the two meet to produce a
+> Fit Score, a plain-language explanation, and a tailored summary.
+
 ```
   PDF résumé ──▶ [1] extract text ──▶ [2] parse to JSON ─┐
                                                          ├─▶ [4] Fit Score ─▶ [5] rank
@@ -54,6 +63,10 @@ the LLM) has a fallback, so the product always produces a result:
 ---
 
 ## 3. Stage 1 — Résumé text extraction (`extractPdfText`)
+
+> **In simple terms:** We pull the text out of your PDF right in the browser (it never
+> leaves your device), and rebuild the lines using each word's on-page position so
+> headings and bullet points survive.
 
 - The PDF is read **entirely in the browser** with **pdf.js** (privacy: the file never
   leaves the device for the local path).
@@ -69,6 +82,10 @@ Output: a newline-delimited plain-text version of the résumé.
 
 ## 4. Stage 2 — Résumé parsing (text → structured JSON)
 
+> **In simple terms:** Turn the résumé text into clean JSON (skills, years, projects,
+> education…). Two engines produce the exact same shape: a built-in one that always
+> works, and a smarter LLM one when an API key is set.
+
 Two interchangeable parsers produce the **same JSON shape**:
 
 ```json
@@ -83,6 +100,10 @@ Two interchangeable parsers produce the **same JSON shape**:
 ```
 
 ### 4a. Local heuristic parser (`parseResume`) — always available, no key
+
+> **In simple terms:** The always-on parser matches your text against skill word-lists,
+> carefully counts real work years (ignoring school dates and not double-counting
+> overlapping jobs), and picks out your name, title, and projects.
 
 - **Hard/soft skills, domains, languages** — matched against curated lexicons
   (`HARD_SKILLS`, `SOFT_SKILLS`, `DOMAINS`, `LANGUAGES`) using word-boundary regex.
@@ -102,6 +123,10 @@ Two interchangeable parsers produce the **same JSON shape**:
 
 ### 4b. LLM parser (`/api/ai/parse-resume`) — richer, when a key is set
 
+> **In simple terms:** When an API key exists, an LLM does the parsing instead — richer
+> results, but told strictly to use only what's actually written and never invent
+> skills or dates. The UI shows the instant local result first, then swaps in the LLM's.
+
 - Sends the extracted text to an **OpenAI-compatible** chat endpoint in strict
   JSON mode. The prompt is deliberately conservative: *extract only what is
   explicitly present; never invent skills or dates.*
@@ -112,7 +137,15 @@ Two interchangeable parsers produce the **same JSON shape**:
 
 ## 5. Stage 3 — Vacancy retrieval
 
+> **In simple terms:** Find real jobs. Best case, the LLM turns your wish into precise
+> hh.kz filters (role, city, remote, experience, salary) and re-ranks what comes back.
+> If there's no key or hh.kz is blocked, a 3-step fallback still guarantees jobs to show.
+
 ### Primary path — LLM-optimized search (`/api/search` → `aiSearch`)
+
+> **In simple terms:** The LLM first writes a smart search (real filters from your
+> words), fetches matching jobs, then scores each one against your request with a
+> one-line reason — so ordering reflects your actual intent, not just keyword overlap.
 
 Instead of dumping the raw prompt into hh's `text` field, the LLM first **plans a
 structured query** (`aiSearchPlan`) so the search uses real vacancy **metadata**:
@@ -134,6 +167,10 @@ information from the prompt" step. Runs on the free Groq model.
 
 ### Fallback path — plain 3-tier fetch (`fetchVacancies`)
 
+> **In simple terms:** With no LLM (or if the smart search fails), search hh.kz plainly
+> through three levels — authenticated server proxy → direct browser call → curated
+> demo set — so there are always jobs to show.
+
 If no LLM key is set (or `/api/search` errors), the prompt is searched directly with a
 **3-tier fallback** that guarantees data:
 
@@ -154,6 +191,10 @@ responsibilities, url, schedule, experience`.
 ---
 
 ## 6. Stage 4 — Fit Score (`scoreVacancy`)
+
+> **In simple terms:** Score how well your CV fits each job from 0–100 using a fixed
+> recipe: hard skills 40%, experience 30%, soft skills 30%. It's plain code (no AI),
+> so the number is always reproducible and explainable.
 
 For each vacancy a **`vacancyProfile`** is built by running the same lexicon
 matchers over `name + requirements + responsibilities` → the vacancy's required
@@ -198,6 +239,10 @@ Soft bars) and the `matches` / `gaps` skill sets.
 
 ## 7. Stage 5 — Ranking
 
+> **In simple terms:** Two different questions are kept apart — does the job match what
+> you *asked for*, and does *your CV* fit it. With an LLM the order follows the request
+> match; without one, a simple "keyword relevance + fit" blend. Either way, top 10 show.
+
 Two distinct axes are kept separate: **prompt-match** (does this role match what you
 asked for?) and **résumé-fit** (how well does *your CV* fit it?).
 
@@ -218,6 +263,9 @@ Sorted descending, the **top 10** are shown.
 
 ## 8. Stage 6 — Explainability (`buildExplain`)
 
+> **In simple terms:** Translate the score into words — what matched, what's missing,
+> and concrete next steps to raise your fit.
+
 Every card decodes the score into plain language (spec requirement):
 - **Matches** — résumé skills the job needs (from the Fit Score's `matches`).
 - **Gaps** — required skills the résumé lacks (`gaps`).
@@ -229,6 +277,10 @@ Every card decodes the score into plain language (spec requirement):
 
 ## 9. Stage 7 — Tailored résumé patch
 
+> **In simple terms:** For the job you pick, write a short 2–3 sentence summary that
+> highlights your matching skills and the role's keywords — by LLM if a key is set,
+> otherwise from a template — with matched words highlighted and a copy button.
+
 For the selected role, IzdeMe writes a **2–3 sentence summary** that weaves in the
 matched skills and the role's keywords and signals movement on the top gap:
 - **LLM path** (`/api/ai/tailor`) when a key is set — highest quality.
@@ -238,6 +290,10 @@ Matched terms are `<mark>`-highlighted, with copy-to-clipboard.
 ---
 
 ## 10. Providers, deployment & robustness
+
+> **In simple terms:** Any OpenAI-style model works (Groq and Gemini ship built in). The
+> two backend copies must stay identical, secrets live in Vercel rather than the code,
+> and pushing to `master` deploys. Everything has a fallback so the app never dead-ends.
 
 - **LLM is provider-agnostic** (any OpenAI-compatible endpoint). Ships with **Groq**
   (`llama-3.3-70b-versatile`) and **Gemini** (`gemini-2.5-flash`); a UI switch appears
@@ -254,6 +310,9 @@ Matched terms are `<mark>`-highlighted, with copy-to-clipboard.
 ---
 
 ## 11. Spec mapping (ТЗ_Izdeme)
+
+> **In simple terms:** A quick table showing where each requirement from the original
+> project spec is actually implemented in the code.
 
 | Spec requirement | Where |
 |---|---|

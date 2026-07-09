@@ -12,9 +12,16 @@ Frontend (index.html)  ──▶  Backend API (server.js)  ──▶  Job Fetche
 
 ## How it works
 
+> **In simple terms:** A plain-English tour of what the AI does, how jobs get picked,
+> and how your match score is worked out.
+
 > Full deep-dive with all formulas: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ### What the AI is responsible for
+
+> **In simple terms:** The AI only handles language tasks — reading your résumé and
+> writing tailored text. It never picks the jobs or decides the match percentage; that's
+> fixed, deterministic code, so results are reproducible and still work with no key.
 
 The LLM (Groq by default, Gemini switchable — any OpenAI-compatible model) handles the
 **language-understanding** parts only:
@@ -33,6 +40,10 @@ the app falls back to a local heuristic parser that produces the same JSON shape
 everything still works offline.
 
 ### How vacancies are selected (LLM-optimized)
+
+> **In simple terms:** Your prompt is turned into real hh.kz filters, up to ~40 jobs are
+> fetched, then the LLM ranks them using every detail (city, remote, salary…). No key or
+> a failure falls back to a plain search. Either way you see the top 10.
 
 The prompt drives an **LLM search pipeline** (`/api/search`, free Groq by default):
 
@@ -55,6 +66,10 @@ If no LLM key is set (or a call fails), it **falls back** to a plain HeadHunter 
 
 ### How the match (Fit Score) is calculated
 
+> **In simple terms:** Your parsed CV is compared against each job's requirements and
+> scored with a weighted recipe — hard skills 40%, experience 30%, soft skills 30% —
+> shown as three bars plus what matched, what's missing, and how to improve.
+
 For every vacancy IzdeMe compares **your parsed résumé** against the **vacancy's
 requirements** (the same skill/soft/domain extractors run over the job text). The match
 is a weighted, explainable **Fit Score = Hard skills 40% · Experience 30% · Soft skills 30%**:
@@ -75,6 +90,9 @@ it needs that you lack), and **Suggestions** (concrete steps to raise the score)
 
 ## Run
 
+> **In simple terms:** Clone it, copy the example env file, run one Node command — no
+> `npm install` needed.
+
 ```bash
 git clone https://github.com/Matol03/izdeme.git
 cd izdeme
@@ -85,6 +103,9 @@ node server.js              # → http://localhost:4173   (Node 18+)
 No `npm install` required — the backend uses only Node built-ins.
 
 ## Deploy (Vercel)
+
+> **In simple terms:** Deploys to Vercel as a static frontend plus serverless API — one
+> command, or import the GitHub repo in the dashboard. Set the optional env vars there.
 
 The repo is Vercel-ready: the frontend (`index.html`) is served static and the backend
 runs as **serverless functions** under `api/` (`server.js` is only for local dev).
@@ -110,6 +131,9 @@ Optional environment variables (Project → Settings → Environment Variables):
 
 ## Spec coverage
 
+> **In simple terms:** A table mapping each requirement from the spec to the exact
+> function that implements it.
+
 | Spec requirement | Where |
 |---|---|
 | Semantic vacancy search (hh.kz), 3–10 results | `fetchVacancies()` + `/api/vacancies` (area=40, host=hh.kz) |
@@ -120,6 +144,10 @@ Optional environment variables (Project → Settings → Environment Variables):
 | LLM (Groq/OpenAI/Gemini): AI resume parsing + Fit Score reasoning | `server.js` → `/api/ai/*` |
 
 ## Connecting the **real** hh.kz API
+
+> **In simple terms:** hh.kz blocks datacenter IPs, so the app tries the server proxy,
+> then a direct call from your own browser, then a curated set — and a badge shows which
+> one served the results. Below are the steps to make the server path fully live in prod.
 
 hh.kz sits behind **DDoS-Guard**, which blocks datacenter/sandbox IPs (you'll see HTTP 403,
 `Server: ddos-guard`). The app handles this with a 3-tier fetch and degrades gracefully:
@@ -141,6 +169,10 @@ The source badge in the UI shows which tier served the results
 (`hh.kz · backend`, `hh.kz · direct`, or `curated demo set`).
 
 ## AI integration — switchable models (free)
+
+> **In simple terms:** Any OpenAI-compatible model works; Groq and Gemini come
+> preconfigured with free keys. Set one or both — with two keys a UI switch lets you
+> compare them. Below are the AI endpoints and the flow when AI is enabled.
 
 The LLM endpoints call any **OpenAI-compatible** API. Two providers ship configured, both with
 free tiers (no credit card) — set either or both:
@@ -172,6 +204,8 @@ Switch provider by setting `LLM_BASE_URL` + `LLM_MODEL` (e.g. OpenAI `https://ap
 
 ## Files
 
+> **In simple terms:** A one-line-per-file map of the project so you know where to look.
+
 - `index.html` — frontend (UI, resume parsing, scoring, explainability)
 - `server.js` — Node backend for local dev (static serving + hh.kz proxy + AI routes)
 - `api/` — Vercel serverless functions (prod); shared logic in `api/_lib.js`
@@ -180,6 +214,9 @@ Switch provider by setting `LLM_BASE_URL` + `LLM_MODEL` (e.g. OpenAI `https://ap
 - `package.json` — `npm start`
 
 ## Next (spec Этап 2/3)
+
+> **In simple terms:** What's planned next — a database cache, user accounts, and
+> embedding-based semantic search (RAG).
 
 PostgreSQL (Supabase) caching of vacancies, user auth, and a RAG layer for embedding-based
 semantic search. The `Resume Parser` and `Fit Score Engine` are already isolated functions, and
