@@ -170,6 +170,10 @@
   .btn-ghost.primary{background:linear-gradient(100deg,rgba(124,92,255,.22),rgba(77,141,255,.22));border-color:rgba(124,92,255,.45)}
 
   /* resume patch */
+  .patch-mount:empty{display:none}
+  .card .patch{margin-top:6px}
+  .patch-close{margin-left:auto;flex-shrink:0;width:32px;height:32px;border-radius:9px;border:1px solid var(--stroke);background:transparent;color:var(--muted);display:grid;place-items:center;cursor:pointer;transition:.15s}
+  .patch-close:hover{color:var(--accent);border-color:var(--stroke-strong)}
   .patch{margin-top:26px;border:1px solid var(--stroke);border-radius:var(--radius);background:linear-gradient(180deg,rgba(124,92,255,.06),var(--panel));backdrop-filter:blur(8px);overflow:hidden;animation:fade .5s ease}
   .patch-head{display:flex;align-items:center;gap:15px;padding:22px 24px;border-bottom:1px solid var(--stroke)}
   .patch-icon{width:46px;height:46px;border-radius:13px;background:linear-gradient(135deg,var(--brand),var(--brand-2));display:grid;place-items:center;flex-shrink:0;box-shadow:0 8px 22px -8px var(--brand)}
@@ -339,7 +343,6 @@
       <h2 id="countLbl">Top matches</h2>
     </div>
     <div class="grid" id="grid"></div>
-    <div id="patchMount"></div>
   </section>
 </main>
 
@@ -759,9 +762,8 @@ async function aiTailorPatch(idx){
     if(!r.ok) return;
     const j=await r.json();
     if(CURRENT.vacancies[idx]!==item) return; // user moved on
-    const el=document.getElementById("resumeText");
+    const el=document.getElementById("resumeText-"+idx);
     if(el&&j.summary) el.innerHTML=markKeywords(j.summary,[...(RESUME.skills||[]),...(j.matches||[]),item.company]);
-    const pill=document.getElementById("aiPill"); if(pill) pill.style.display="inline-flex";
   }catch(e){}
 }
 
@@ -930,6 +932,7 @@ function card(item, idx){
       </button>
       ${item.url?`<a class="btn-ghost" href="${item.url}" target="_blank" rel="noopener" title="Open on hh.kz" style="flex:0 0 auto;padding:11px 14px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M7 17 17 7M17 7H9m8 0v8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></a>`:""}
     </div>
+    <div class="patch-mount" id="patchMount-${idx}"></div>
   </div>`;
 }
 
@@ -947,26 +950,38 @@ function renderResume(idx){
   txt+=`. `;
   if(gap) txt+=`Currently building ${mk(cap(gap))} to fully close the role's gap. `;
   txt+=`Brings structured logic, fast iteration and clear communication.`;
-  document.getElementById("patchMount").innerHTML=`
+  const mount=document.getElementById("patchMount-"+idx);
+  if(!mount) return;
+  mount.innerHTML=`
   <div class="patch">
     <div class="patch-head">
       <div class="patch-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></div>
       <div style="flex:1"><h3>AI Resume Patch</h3><p>Tailored summary for <b>${item.name}</b> @ ${item.company}</p></div>
+      <button class="patch-close" title="Close" onclick="closeResume(${idx})"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
     </div>
     <div class="patch-body">
-      <div class="resume-text" id="resumeText">${txt}</div>
+      <div class="resume-text" id="resumeText-${idx}">${txt}</div>
       <div class="patch-foot" style="justify-content:flex-end">
-        <button class="btn-copy" id="copyBtn" onclick="copyResume()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10" stroke="currentColor" stroke-width="2"/></svg> Copy to Clipboard</button>
+        <button class="btn-copy" id="copyBtn-${idx}" onclick="copyResume(${idx})"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10" stroke="currentColor" stroke-width="2"/></svg> Copy to Clipboard</button>
       </div>
     </div>
   </div>`;
   document.querySelectorAll('.card').forEach((c,i)=>c.classList.toggle('top',i===idx||i<3));
-  if(AI_ENABLED) aiTailorPatch(idx);   // overwrite summary with OpenAI version when ready
+  if(AI_ENABLED) aiTailorPatch(idx);   // overwrite summary with the LLM version when ready
 }
-function selectRole(idx){renderResume(idx);document.getElementById("patchMount").scrollIntoView({behavior:"smooth",block:"center"});}
-function copyResume(){
-  const t=document.getElementById("resumeText").innerText;
-  navigator.clipboard.writeText(t).then(()=>{const b=document.getElementById("copyBtn");b.classList.add("done");
+function selectRole(idx){
+  const mount=document.getElementById("patchMount-"+idx);
+  if(mount&&mount.innerHTML.trim()){ closeResume(idx); return; }   // toggle off if already open
+  renderResume(idx);
+  if(mount) mount.scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+function closeResume(idx){
+  const mount=document.getElementById("patchMount-"+idx);
+  if(mount) mount.innerHTML="";
+}
+function copyResume(idx){
+  const t=document.getElementById("resumeText-"+idx).innerText;
+  navigator.clipboard.writeText(t).then(()=>{const b=document.getElementById("copyBtn-"+idx);b.classList.add("done");
     b.innerHTML='<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="m20 6-11 11-5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Copied!';
     setTimeout(()=>{b.classList.remove("done");b.innerHTML='<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10" stroke="currentColor" stroke-width="2"/></svg> Copy to Clipboard';},1900);
   }).catch(()=>{});
@@ -987,7 +1002,6 @@ async function runMatch(){
   btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="animation:spin 1s linear infinite"><path d="M12 3a9 9 0 1 0 9 9" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg> Matching…';
   const res=document.getElementById("results"); res.classList.add("show");
   document.getElementById("grid").innerHTML='<div class="skel-grid">'+Array(6).fill('<div class="skel"></div>').join("")+'</div>';
-  document.getElementById("patchMount").innerHTML="";
 
   const {items,source}=await fetchVacancies(query);
 
