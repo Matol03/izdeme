@@ -1056,9 +1056,6 @@ function resetApp(){document.getElementById("results").classList.remove("show");
 })();
 function useChip(el){document.getElementById("prompt").value=el.getAttribute("data-q")||el.textContent.trim();runMatch();}
 </script>
-<script type="module">
-  import { inject } from '/_vercel/insights/script.js';
-  inject();
-</script>
+<script defer src="/_vercel/insights/script.js"></script>
 </body>
 </html>
